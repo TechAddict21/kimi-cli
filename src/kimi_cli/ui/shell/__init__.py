@@ -799,7 +799,6 @@ class Shell:
         Returns:
             bool: Whether the run is successful.
         """
-        logger.info("Running soul with user input: {user_input}", user_input=user_input)
 
         cancel_event = asyncio.Event()
 

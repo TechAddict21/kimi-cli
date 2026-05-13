@@ -579,10 +579,8 @@ def kimi(
                         param_hint="--continue",
                     )
                 resumed = True  # Continuing previous session
-                logger.info("Continuing previous session: {session_id}", session_id=session.id)
             else:
                 session = await Session.create(work_dir)
-                logger.info("Created new session: {session_id}", session_id=session.id)
 
             nonlocal _latest_created_session
             _latest_created_session = session
@@ -732,7 +730,7 @@ def kimi(
     def _print_resume_hint(session: Session) -> None:
         """Print a hint for resuming the session after exit."""
         if not session.is_empty():
-            _emit_fatal_error(f"\nTo resume this session: kimi -r {session.id}")
+            _emit_fatal_error(f"\nTo resume this session: {CLI_COMMAND} -r {session.id}")
 
     async def _post_run(last_session: Session, exit_code: int) -> None:
         _print_resume_hint(last_session)

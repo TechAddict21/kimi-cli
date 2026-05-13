@@ -723,6 +723,7 @@ class KimiSoul:
 
         self._current_turn_id = uuid.uuid4().hex
         self._last_tool_calls = []
+
         await self._checkpoint()  # this creates the checkpoint 0 on first run
         await self._context.append_message(user_message)
         logger.debug("Appended user message to context")
@@ -1131,14 +1132,7 @@ class KimiSoul:
         # ═══════════════════════════════════════════════════════════════════════
         # 2e.5. USAGE & STATUS UPDATE
         # ═══════════════════════════════════════════════════════════════════════
-        llm_elapsed = time.monotonic() - t0
         usage = result.usage
-        logger.info(
-            "LLM step completed in {elapsed:.1f}s (input={input_tokens}, output={output_tokens})",
-            elapsed=llm_elapsed,
-            input_tokens=usage.input if usage else "?",
-            output_tokens=usage.output if usage else "?",
-        )
         status_update = StatusUpdate(
             token_usage=usage, message_id=result.id, plan_mode=self._plan_mode
         )

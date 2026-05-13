@@ -11,6 +11,8 @@ from typing import Literal
 
 from kaos.path import KaosPath
 
+from kimi_cli.constant import CLI_COMMAND_ALT
+
 
 class GitBashNotFoundError(RuntimeError):
     """Raised when kimi-cli runs on Windows but cannot locate git-bash.
@@ -21,7 +23,7 @@ class GitBashNotFoundError(RuntimeError):
 
 
 _GIT_BASH_INSTALL_HINT = (
-    "kimi-cli on Windows requires Git for Windows (https://git-scm.com/downloads/win) "
+    f"{CLI_COMMAND_ALT} on Windows requires Git for Windows (https://git-scm.com/downloads/win) "
     "for its bundled bash. If git-bash is installed but not on PATH, set the "
     "KIMI_CLI_GIT_BASH_PATH environment variable to your bash.exe, e.g.:\n"
     "    KIMI_CLI_GIT_BASH_PATH=C:\\Program Files\\Git\\bin\\bash.exe"

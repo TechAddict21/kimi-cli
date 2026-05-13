@@ -55,6 +55,7 @@ from kosong.message import (
 )
 from kosong.tooling import Tool as KosongTool
 from kosong.tooling import ToolReturnValue
+from kosong.utils.test_logger import write_file_log
 
 if TYPE_CHECKING:
 
@@ -151,6 +152,15 @@ class GoogleGenAI:
         config.system_instruction = system_prompt
         config.tools = [tool_to_google_genai(tool) for tool in tools]
 
+        request_body = {
+            "model": self._model,
+            "contents": contents,
+            "config": config,
+        }
+        write_file_log(
+            "GOOGLE_GENAI_API_REQUEST",
+            json.dumps(request_body, ensure_ascii=False, default=str),
+        )
         try:
             if self._stream:
                 stream_response = await self._client.aio.models.generate_content_stream(  # type: ignore[reportUnknownMemberType]

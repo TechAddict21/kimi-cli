@@ -127,14 +127,8 @@ async def load_agents_md(work_dir: KaosPath) -> str | None:
             content = (await path.read_text()).strip()
             if content:
                 discovered.append((path, content))
-                logger.info("Loaded agents.md: {path}", path=path)
 
     if not discovered:
-        logger.info(
-            "No AGENTS.md found from {root} to {cwd}",
-            root=project_root,
-            cwd=work_dir,
-        )
         return None
 
     # Phase 2: allocate budget leaf-first so deeper (more specific) files
@@ -401,7 +395,6 @@ async def load_agent(
         MCPConfigError(KimiCLIException, ValueError): When any MCP configuration is invalid.
         MCPRuntimeError(KimiCLIException, RuntimeError): When any MCP server cannot be connected.
     """
-    logger.info("Loading agent: {agent_file}", agent_file=agent_file)
     agent_spec = load_agent_spec(agent_file)
 
     system_prompt = _load_system_prompt(
@@ -496,7 +489,6 @@ async def load_agent(
 def _load_system_prompt(
     path: Path, args: dict[str, str], builtin_args: BuiltinSystemPromptArgs
 ) -> str:
-    logger.info("Loading system prompt: {path}", path=path)
     system_prompt = path.read_text(encoding="utf-8").strip()
     logger.debug(
         "Substituting system prompt with builtin args: {builtin_args}, spec args: {spec_args}",

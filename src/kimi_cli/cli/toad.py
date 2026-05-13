@@ -7,6 +7,8 @@ from pathlib import Path
 
 import typer
 
+from kimi_cli.constant import CLI_COMMAND, CLI_COMMAND_ALT
+
 
 def _default_acp_command() -> list[str]:
     argv0 = sys.argv[0]
@@ -25,11 +27,15 @@ def _default_acp_command() -> list[str]:
 
 def _default_toad_command() -> list[str]:
     if sys.version_info < (3, 14):
-        typer.echo("`kimi term` requires Python 3.14+ because Toad requires it.", err=True)
+        typer.echo(
+            f"`{CLI_COMMAND} term` requires Python 3.14+ because Toad requires it.",
+            err=True,
+        )
         raise typer.Exit(code=1)
     if importlib.util.find_spec("toad") is None:
         typer.echo(
-            "Toad dependency is missing. Install kimi-cli with Python 3.14+ to use `kimi term`.",
+            f"Toad dependency is missing. Install {CLI_COMMAND_ALT} with "
+            f"Python 3.14+ to use `{CLI_COMMAND} term`.",
             err=True,
         )
         raise typer.Exit(code=1)

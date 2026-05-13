@@ -202,7 +202,6 @@ class KimiCLI:
             config.loop_control.max_retries_per_step = max_retries_per_step
         if max_ralph_iterations is not None:
             config.loop_control.max_ralph_iterations = max_ralph_iterations
-        logger.info("Loaded config: {config}", config=config)
 
         _phase_t = time.monotonic()
         oauth = OAuthManager(config)
@@ -248,10 +247,6 @@ class KimiCLI:
             session_id=session.id,
             oauth=oauth,
         )
-        if llm is not None:
-            logger.info("Using LLM provider: {provider}", provider=provider)
-            logger.info("Using LLM model: {model}", model=model)
-            logger.info("Thinking mode: {thinking}", thinking=thinking)
 
         if startup_progress is not None:
             startup_progress("Scanning workspace...")

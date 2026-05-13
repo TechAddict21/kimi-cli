@@ -89,6 +89,7 @@ from kosong.message import (
     ToolCallPart,
 )
 from kosong.tooling import Tool
+from kosong.utils.test_logger import write_file_log
 
 if TYPE_CHECKING:
 
@@ -350,6 +351,20 @@ class Anthropic:
         tools_ = [_convert_tool(tool) for tool in tools]
         if tools:
             tools_[-1]["cache_control"] = CacheControlEphemeralParam(type="ephemeral")
+        request_body = {
+            "model": self._model,
+            "messages": messages,
+            "system": system,
+            "tools": tools_,
+            "stream": self._stream,
+            "extra_headers": extra_headers,
+            "metadata": self._metadata if self._metadata is not None else omit,
+            **generation_kwargs,
+        }
+        write_file_log(
+            "ANTHROPIC_API_REQUEST",
+            json.dumps(request_body, ensure_ascii=False, default=str),
+        )
         try:
             response = await self._client.messages.create(
                 model=self._model,

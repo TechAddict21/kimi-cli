@@ -1,4 +1,5 @@
 import copy
+import json
 import mimetypes
 import os
 import uuid
@@ -43,6 +44,7 @@ from kosong.message import (
 )
 from kosong.tooling import Tool
 from kosong.utils.jsonschema import JsonDict, ensure_property_types
+from kosong.utils.test_logger import write_file_log
 
 if TYPE_CHECKING:
 
@@ -166,6 +168,18 @@ class Kimi:
         }
         generation_kwargs.update(self._generation_kwargs)
 
+        request_body = {
+            "model": self.model,
+            "messages": messages,
+            "tools": [_convert_tool(tool) for tool in tools],
+            "stream": self.stream,
+            "stream_options": {"include_usage": True} if self.stream else omit,
+            **generation_kwargs,
+        }
+        write_file_log(
+            "KIMI_API_REQUEST",
+            json.dumps(request_body, ensure_ascii=False, default=str),
+        )
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,

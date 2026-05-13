@@ -1,4 +1,5 @@
 import copy
+import json
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any, Self, Unpack, cast
@@ -32,6 +33,7 @@ from kosong.chat_provider.openai_common import (
 from kosong.contrib.chat_provider.common import ToolMessageConversion
 from kosong.message import ContentPart, Message, TextPart, ThinkPart, ToolCall, ToolCallPart
 from kosong.tooling import Tool
+from kosong.utils.test_logger import write_file_log
 
 if TYPE_CHECKING:
 
@@ -138,6 +140,19 @@ class OpenAILegacy:
             if has_think_part:
                 reasoning_effort = "medium"
 
+        request_body = {
+            "model": self.model,
+            "messages": messages,
+            "tools": [tool_to_openai(tool) for tool in tools],
+            "stream": self.stream,
+            "stream_options": {"include_usage": True} if self.stream else omit,
+            "reasoning_effort": reasoning_effort,
+            **generation_kwargs,
+        }
+        write_file_log(
+            "OPENAI_LEGACY_API_REQUEST",
+            json.dumps(request_body, ensure_ascii=False, default=str),
+        )
         try:
             response = await self.client.chat.completions.create(
                 model=self.model,

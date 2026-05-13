@@ -1,4 +1,5 @@
 import copy
+import json
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any, Self, TypedDict, Unpack, cast, get_args
@@ -56,6 +57,7 @@ from kosong.message import (
     ToolCallPart,
 )
 from kosong.tooling import Tool
+from kosong.utils.test_logger import write_file_log
 
 if TYPE_CHECKING:
 
@@ -176,6 +178,18 @@ class OpenAIResponses:
             )
             generation_kwargs["include"] = ["reasoning.encrypted_content"]
 
+        request_body = {
+            "stream": self._stream,
+            "model": self._model,
+            "input": inputs,
+            "tools": [_convert_tool(tool) for tool in tools],
+            "store": False,
+            **generation_kwargs,
+        }
+        write_file_log(
+            "OPENAI_RESPONSES_API_REQUEST",
+            json.dumps(request_body, ensure_ascii=False, default=str),
+        )
         try:
             response = await self._client.responses.create(
                 stream=self._stream,
