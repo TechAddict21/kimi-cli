@@ -19,7 +19,7 @@ def _repo_root() -> Path:
 
 def _kimi_bin() -> str:
     """Return the path to the kimi entry-point script inside the venv."""
-    return str(_repo_root() / ".venv" / "bin" / "kimi")
+    return str(_repo_root() / ".venv" / "bin" / "pc-kimi")
 
 
 class ACPTestClient:

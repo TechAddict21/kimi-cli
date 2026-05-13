@@ -56,7 +56,7 @@ def _start_tmux_shell(
     env = {
         "HOME": str(home_dir),
         "USERPROFILE": str(home_dir),
-        "KIMI_SHARE_DIR": str(home_dir / ".kimi"),
+        "KIMI_SHARE_DIR": str(home_dir / ".pc-kimi"),
         "KIMI_CLI_NO_AUTO_UPDATE": "1",
         "TERM": "xterm-256color",
         "COLUMNS": str(columns),

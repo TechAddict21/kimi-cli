@@ -31,6 +31,7 @@ from kosong.tooling.mcp import convert_mcp_content
 from kosong.utils.typing import JsonType
 
 from kimi_cli import logger
+from kimi_cli.constant import CLI_COMMAND
 from kimi_cli.exception import InvalidToolError, MCPRuntimeError
 from kimi_cli.hooks.engine import HookEngine
 from kimi_cli.tools import SkipThisTool
@@ -561,7 +562,7 @@ class KimiToolset:
         def _mark_oauth_unauthorized(server_name: str) -> None:
             logger.warning(
                 "Skipping OAuth MCP server '{server_name}': not authorized. "
-                "Run 'kimi mcp auth {server_name}' first.",
+                f"Run '{CLI_COMMAND} mcp auth {{server_name}}' first.",
                 server_name=server_name,
             )
             self._mcp_servers[server_name] = MCPServerInfo(

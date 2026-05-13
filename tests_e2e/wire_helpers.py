@@ -53,7 +53,7 @@ def make_env(home_dir: Path) -> dict[str, str]:
 
 
 def share_dir(home_dir: Path) -> Path:
-    return home_dir / ".kimi"
+    return home_dir / ".pc-kimi"
 
 
 def register_path_replacements(
@@ -509,7 +509,7 @@ def base_command() -> list[str]:
     override = os.getenv(WIRE_COMMAND_ENV)
     if override is not None:
         override = override.strip()
-    parts = shlex.split(override, posix=os.name != "nt") if override else ["uv", "run", "kimi"]
+    parts = shlex.split(override, posix=os.name != "nt") if override else ["uv", "run", "pc-kimi"]
     return [part for part in parts if part != "--wire"]
 
 

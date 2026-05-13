@@ -4,6 +4,8 @@ from typing import Annotated, Any, Literal
 
 import typer
 
+from kimi_cli.constant import CLI_COMMAND
+
 cli = typer.Typer(help="Manage MCP server configurations.")
 
 
@@ -86,13 +88,13 @@ Transport = Literal["stdio", "http"]
     Examples:\n
       \n
       # Add streamable HTTP server:\n
-      kimi mcp add --transport http context7 https://mcp.context7.com/mcp --header \"CONTEXT7_API_KEY: ctx7sk-your-key\"\n
+      {CLI_COMMAND} mcp add --transport http context7 https://mcp.context7.com/mcp --header \"CONTEXT7_API_KEY: ctx7sk-your-key\"\n
       \n
       # Add streamable HTTP server with OAuth authorization:\n
-      kimi mcp add --transport http --auth oauth linear https://mcp.linear.app/mcp\n
+      {CLI_COMMAND} mcp add --transport http --auth oauth linear https://mcp.linear.app/mcp\n
       \n
       # Add stdio server:\n
-      kimi mcp add --transport stdio chrome-devtools -- npx chrome-devtools-mcp@latest
+      {CLI_COMMAND} mcp add --transport stdio chrome-devtools -- npx chrome-devtools-mcp@latest
     """.strip(),  # noqa: E501
 )
 def mcp_add(
@@ -243,7 +245,7 @@ def mcp_list():
                 transport = "http"
             line = f"{name} ({transport}): {server['url']}"
             if server.get("auth") == "oauth" and not _has_oauth_tokens(server["url"]):
-                line += " [authorization required - run: kimi mcp auth " + name + "]"
+                line += f" [authorization required - run: {CLI_COMMAND} mcp auth " + name + "]"
         else:
             line = f"{name}: {server}"
         typer.echo(f"  {line}")

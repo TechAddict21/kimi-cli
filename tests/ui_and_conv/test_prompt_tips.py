@@ -136,28 +136,11 @@ def _render_toolbar_lines(
 
 
 def test_build_toolbar_tips_without_clipboard() -> None:
-    assert _build_toolbar_tips(clipboard_available=False) == [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
-        "/feedback: send feedback",
-        "/theme: switch dark/light",
-        "@: mention files",
-    ]
+    assert _build_toolbar_tips(clipboard_available=False) == []
 
 
 def test_build_toolbar_tips_with_clipboard() -> None:
-    assert _build_toolbar_tips(clipboard_available=True) == [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
-        "/feedback: send feedback",
-        "/theme: switch dark/light",
-        "ctrl-v: paste clipboard",
-        "@: mention files",
-    ]
+    assert _build_toolbar_tips(clipboard_available=True) == []
 
 
 # ── _display_width ─────────────────────────────────────────────────────────────

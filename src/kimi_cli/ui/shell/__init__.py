@@ -17,18 +17,18 @@ from kosong.chat_provider import (
     APITimeoutError,
     ChatProviderError,
 )
-from rich.console import Group, RenderableType
+from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
 from kimi_cli import logger
 from kimi_cli.background import list_task_views
+from kimi_cli.constant import CLI_COMMAND
 from kimi_cli.llm import model_display_name
 from kimi_cli.notifications import NotificationManager, NotificationWatcher
 from kimi_cli.soul import LLMNotSet, LLMNotSupported, MaxStepsReached, RunCancelled, Soul, run_soul
 from kimi_cli.soul.kimisoul import FLOW_COMMAND_PREFIX, KimiSoul
-from kimi_cli.ui.shell import update as _update_mod
 from kimi_cli.ui.shell.console import console
 from kimi_cli.ui.shell.echo import render_user_echo_text
 from kimi_cli.ui.shell.mcp_status import render_mcp_prompt
@@ -43,7 +43,7 @@ from kimi_cli.ui.shell.prompt import (
 from kimi_cli.ui.shell.replay import replay_recent_history
 from kimi_cli.ui.shell.slash import SKILL_COMMAND_PREFIX, shell_mode_registry
 from kimi_cli.ui.shell.slash import registry as shell_slash_registry
-from kimi_cli.ui.shell.update import LATEST_VERSION_FILE, UpdateResult, do_update, semver_tuple
+from kimi_cli.ui.shell.update import UpdateResult, do_update
 from kimi_cli.ui.shell.visualize import (
     ApprovalPromptDelegate,
     visualize,
@@ -380,8 +380,6 @@ class Shell:
             logger.info("Auto-update disabled by KIMI_CLI_NO_AUTO_UPDATE environment variable")
         else:
             self._start_background_task(self._auto_update())
-
-        _print_welcome_info(self.soul.name or "Kimi Code CLI", self._welcome_info)
 
         # Start telemetry periodic flush and disk retry
         from kimi_cli.telemetry import get_sink
@@ -972,7 +970,7 @@ class Shell:
                 console.print(f"[red]LLM provider error: {e}[/red]")
             if not isinstance(e, APIStatusError) or e.status_code not in (401, 402, 403):
                 console.print(
-                    "[dim]If this persists, run [bold]kimi export[/bold] and send the "
+                    f"[dim]If this persists, run [bold]{CLI_COMMAND} export[/bold] and send the "
                     "exported data to support for assistance. "
                     "Please do not share the exported file publicly.[/dim]"
                 )
@@ -989,7 +987,7 @@ class Shell:
             logger.exception("Unexpected error:")
             console.print(
                 f"[red]Unexpected error: {e}[/red]\n"
-                "[dim]Run [bold]kimi export[/bold] and send the exported data to support "
+                f"[dim]Run [bold]{CLI_COMMAND} export[/bold] and send the exported data to support "
                 "for assistance. Please do not share the exported file publicly.[/dim]"
             )
             raise  # re-raise unknown error
@@ -1458,61 +1456,3 @@ class WelcomeInfoItem:
     name: str
     value: str
     level: Level = Level.INFO
-
-
-def _print_welcome_info(name: str, info_items: list[WelcomeInfoItem]) -> None:
-    head = Text.from_markup("Welcome to Kimi Code CLI!")
-    help_text = Text.from_markup("[grey50]Send /help for help information.[/grey50]")
-
-    # Use Table for precise width control
-    logo = Text.from_markup(_LOGO)
-    table = Table(show_header=False, show_edge=False, box=None, padding=(0, 1), expand=False)
-    table.add_column(justify="left")
-    table.add_column(justify="left")
-    table.add_row(logo, Group(head, help_text))
-
-    rows: list[RenderableType] = [table]
-
-    if info_items:
-        rows.append(Text(""))  # empty line
-    for item in info_items:
-        rows.append(Text(f"{item.name}: {item.value}", style=item.level.value))
-
-    if LATEST_VERSION_FILE.exists():
-        from kimi_cli.constant import VERSION as current_version
-        from kimi_cli.ui.shell.update import SKIPPED_VERSION_FILE
-        from kimi_cli.utils.envvar import get_env_bool
-
-        if not get_env_bool("KIMI_CLI_NO_AUTO_UPDATE"):
-            try:
-                latest_version = LATEST_VERSION_FILE.read_text(encoding="utf-8").strip()
-            except OSError:
-                latest_version = ""
-            if latest_version and semver_tuple(latest_version) > semver_tuple(current_version):
-                try:
-                    skipped = (
-                        SKIPPED_VERSION_FILE.read_text(encoding="utf-8").strip()
-                        if SKIPPED_VERSION_FILE.exists()
-                        else ""
-                    )
-                except OSError:
-                    skipped = ""
-                if skipped != latest_version:
-                    rows.append(
-                        Text.from_markup(
-                            f"\n[yellow]New version available: {latest_version}. "
-                            f"Please run `{_update_mod.UPGRADE_COMMAND}` to upgrade.[/yellow]"
-                        )
-                    )
-                    from kimi_cli.telemetry import track
-
-                    track("update_prompted", current=current_version, latest=latest_version)
-
-    console.print(
-        Panel(
-            Group(*rows),
-            border_style=_KIMI_BLUE,
-            expand=False,
-            padding=(1, 2),
-        )
-    )

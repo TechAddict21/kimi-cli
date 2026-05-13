@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clean up .kimi sessions whose workdir is under a temporary directory.
+"""Clean up .pc-kimi sessions whose workdir is under a temporary directory.
 
 This script handles two cases:
   1. Entries in kimi.json whose path is a tmp directory -> remove entry + session dir.
@@ -23,7 +23,7 @@ import sys
 from hashlib import md5
 from pathlib import Path
 
-KIMI_DIR = Path.home() / ".kimi"
+KIMI_DIR = Path.home() / ".pc-kimi"
 METADATA_FILE = KIMI_DIR / "kimi.json"
 SESSIONS_DIR = KIMI_DIR / "sessions"
 

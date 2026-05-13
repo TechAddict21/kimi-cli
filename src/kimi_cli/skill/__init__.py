@@ -14,6 +14,7 @@ from kaos.path import KaosPath
 from pydantic import BaseModel, ConfigDict, Field
 
 from kimi_cli import logger
+from kimi_cli.constant import SHARE_DIR_NAME
 from kimi_cli.skill.flow import Flow, FlowError
 from kimi_cli.skill.flow.d2 import parse_d2_flowchart
 from kimi_cli.skill.flow.mermaid import parse_mermaid_flowchart
@@ -25,9 +26,9 @@ SkillScope = Literal["builtin", "user", "project", "extra"]
 """Where a skill was discovered from.
 
 - ``builtin``: bundled with kimi-cli
-- ``user``: from the user's home (``~/.kimi/skills``, ``~/.agents/skills``, ...)
+- ``user``: from the user's home (``~/{share_dir}/skills``, ``~/.agents/skills``, ...)
 - ``project``: from the current project's working directory
-  (``<work_dir>/.kimi/skills``, ``<work_dir>/.agents/skills``, ...)
+  (``<work_dir>/{share_dir}/skills``, ``<work_dir>/.agents/skills``, ...)
 - ``extra``: from ``extra_skill_dirs`` config or ``--skills-dir`` override
 """
 
@@ -68,10 +69,10 @@ def _get_user_brand_skills_dir_candidates() -> tuple[KaosPath, ...]:
     """
     Get user-level brand skills directory candidates in priority order.
 
-    Brand group: ``~/.kimi/skills`` > ``~/.claude/skills`` > ``~/.codex/skills``
+    Brand group: ``~/{share_dir}/skills`` > ``~/.claude/skills`` > ``~/.codex/skills``
     """
     return (
-        KaosPath.home() / ".kimi" / "skills",
+        KaosPath.home() / SHARE_DIR_NAME / "skills",
         KaosPath.home() / ".claude" / "skills",
         KaosPath.home() / ".codex" / "skills",
     )
@@ -90,10 +91,10 @@ def _get_project_brand_skills_dir_candidates(work_dir: KaosPath) -> tuple[KaosPa
     """
     Get project-level brand skills directory candidates in priority order.
 
-    Brand group: ``.kimi/skills`` > ``.claude/skills`` > ``.codex/skills``
+    Brand group: ``{share_dir}/skills`` > ``.claude/skills`` > ``.codex/skills``
     """
     return (
-        work_dir / ".kimi" / "skills",
+        work_dir / SHARE_DIR_NAME / "skills",
         work_dir / ".claude" / "skills",
         work_dir / ".codex" / "skills",
     )

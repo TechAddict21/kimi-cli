@@ -1000,8 +1000,6 @@ def _get_git_status() -> tuple[bool, int, int]:
 def _format_git_badge(branch: str, dirty: bool, ahead: int, behind: int) -> str:
     """Format branch name with an optional status badge: ``main [± ↑3↓1]``."""
     parts: list[str] = []
-    if dirty:
-        parts.append("±")
     sync = ""
     if ahead:
         sync += f"↑{ahead}"
@@ -1153,17 +1151,7 @@ def _current_toast(position: Literal["left", "right"] = "left") -> _ToastEntry |
 
 
 def _build_toolbar_tips(clipboard_available: bool) -> list[str]:
-    tips = [
-        "ctrl-x: toggle mode",
-        "shift-tab: plan mode",
-        "ctrl-o: editor",
-        "ctrl-j: newline",
-        "/feedback: send feedback",
-        "/theme: switch dark/light",
-    ]
-    if clipboard_available:
-        tips.append("ctrl-v: paste clipboard")
-    tips.append("@: mention files")
+    tips: list[str] = []
     return tips
 
 

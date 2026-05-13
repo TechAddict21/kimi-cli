@@ -128,7 +128,7 @@ def _run_print_mode(
     cmd = [
         "uv",
         "run",
-        "kimi",
+        "pc-kimi",
         "--print",
         "--yolo",
         "--input-format",
@@ -247,7 +247,7 @@ def test_scripted_echo_media_e2e(temp_work_dir: KaosPath, tmp_path: Path, mode: 
         cmd = [
             "uv",
             "run",
-            "kimi",
+            "pc-kimi",
             "--wire",
             "--yolo",
             "--config-file",

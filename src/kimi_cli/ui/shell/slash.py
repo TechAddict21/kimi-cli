@@ -10,6 +10,7 @@ from kimi_cli import logger
 from kimi_cli.auth.platforms import get_platform_name_for_provider, refresh_managed_models
 from kimi_cli.cli import Reload, SwitchToVis, SwitchToWeb
 from kimi_cli.config import load_config, save_config
+from kimi_cli.constant import CLI_COMMAND
 from kimi_cli.exception import ConfigError
 from kimi_cli.session import Session
 from kimi_cli.soul.kimisoul import KimiSoul
@@ -595,7 +596,9 @@ async def list_sessions(app: Shell, args: str):
         return
 
     if selected_work_dir != current_session.work_dir:
-        cmd = f"kimi --work-dir {shlex.quote(str(selected_work_dir))} --session {selection}"
+        cmd = (
+            f"{CLI_COMMAND} --work-dir {shlex.quote(str(selected_work_dir))} --session {selection}"
+        )
         console.print(f"[yellow]Session is in a different directory. Run:[/yellow]\n  {cmd}")
         return
 

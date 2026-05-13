@@ -26,6 +26,7 @@ def _normalize_cli_output(text: str, *, replace: dict[str, str] | None = None) -
                 normalized = normalized.replace(old, new)
     normalized = normalize_value(normalized)
     normalized = normalized.replace("kimi-agent mcp", "<cmd> mcp")
+    normalized = normalized.replace("pc-kimi mcp", "<cmd> mcp")
     normalized = normalized.replace("kimi mcp", "<cmd> mcp")
     return normalized
 
@@ -104,7 +105,7 @@ def test_mcp_stdio_management(tmp_path: Path) -> None:
     )
     assert add.returncode == 0, _normalize_cli_output(add.stderr, replace=replacements)
     assert _normalize_cli_output(add.stdout, replace=replacements) == snapshot(
-        "Added MCP server 'test' to <home_dir>/.kimi/mcp.json.\n"
+        "Added MCP server 'test' to <home_dir>/.pc-kimi/mcp.json.\n"
     )
     assert _load_mcp_config(home_dir, replacements=replacements) == snapshot(
         {"mcpServers": {"test": {"args": ["<server>"], "command": "<python>"}}}
@@ -114,7 +115,7 @@ def test_mcp_stdio_management(tmp_path: Path) -> None:
     assert listed.returncode == 0, _normalize_cli_output(listed.stderr, replace=replacements)
     assert _normalize_cli_output(listed.stdout, replace=replacements) == snapshot(
         """\
-MCP config file: <home_dir>/.kimi/mcp.json
+MCP config file: <home_dir>/.pc-kimi/mcp.json
   test (stdio): <python> <server>
 """
     )
@@ -134,7 +135,7 @@ Testing connection to 'test'...
     removed = _run_cli(["mcp", "remove", "test"], env)
     assert removed.returncode == 0, _normalize_cli_output(removed.stderr, replace=replacements)
     assert _normalize_cli_output(removed.stdout, replace=replacements) == snapshot(
-        "Removed MCP server 'test' from <home_dir>/.kimi/mcp.json.\n"
+        "Removed MCP server 'test' from <home_dir>/.pc-kimi/mcp.json.\n"
     )
     assert _load_mcp_config(home_dir, replacements=replacements) == snapshot({"mcpServers": {}})
 
@@ -170,7 +171,7 @@ def test_mcp_http_management_and_auth_errors(tmp_path: Path) -> None:
     )
     assert add_http.returncode == 0, _normalize_cli_output(add_http.stderr)
     assert _normalize_cli_output(add_http.stdout) == snapshot(
-        "Added MCP server 'remote' to <home_dir>/.kimi/mcp.json.\n"
+        "Added MCP server 'remote' to <home_dir>/.pc-kimi/mcp.json.\n"
     )
     assert _load_mcp_config(home_dir, replacements=replacements) == snapshot(
         {
@@ -199,7 +200,7 @@ def test_mcp_http_management_and_auth_errors(tmp_path: Path) -> None:
     )
     assert add_oauth.returncode == 0, _normalize_cli_output(add_oauth.stderr)
     assert _normalize_cli_output(add_oauth.stdout) == snapshot(
-        "Added MCP server 'oauth' to <home_dir>/.kimi/mcp.json.\n"
+        "Added MCP server 'oauth' to <home_dir>/.pc-kimi/mcp.json.\n"
     )
     assert _load_mcp_config(home_dir, replacements=replacements) == snapshot(
         {

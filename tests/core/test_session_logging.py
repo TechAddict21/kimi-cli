@@ -87,7 +87,7 @@ class TestCollectRecentLogFiles:
         """Group 2: files with mtime within 2 days of now."""
         log_dir = self._setup_log_dir(tmp_path)
         now = time.time()
-        self._make_log(log_dir, "kimi.log", now - 3600)  # 1 hour ago
+        self._make_log(log_dir, "pc-kimi.log", now - 3600)  # 1 hour ago
         self._make_log(log_dir, "kimi.old.log", now - 10 * 86400)  # 10 days ago
 
         session_dir = tmp_path / "session"
@@ -97,7 +97,7 @@ class TestCollectRecentLogFiles:
             files = _collect_recent_log_files(session_dir)
 
         names = {f.name for f in files}
-        assert "kimi.log" in names
+        assert "pc-kimi.log" in names
         assert "kimi.old.log" not in names
 
     def test_collects_logs_near_session_time(self, tmp_path: Path):
@@ -111,7 +111,7 @@ class TestCollectRecentLogFiles:
         # This log is way too old (30 days before session)
         self._make_log(log_dir, "kimi.ancient.log", session_time - 30 * 86400)
         # Current log (near export time)
-        self._make_log(log_dir, "kimi.log", now - 60)
+        self._make_log(log_dir, "pc-kimi.log", now - 60)
 
         session_dir = tmp_path / "session"
         session_dir.mkdir()
@@ -122,14 +122,14 @@ class TestCollectRecentLogFiles:
 
         names = {f.name for f in files}
         assert "kimi.session-era.log" in names  # group 1: near session
-        assert "kimi.log" in names  # group 2: near export
+        assert "pc-kimi.log" in names  # group 2: near export
         assert "kimi.ancient.log" not in names  # too old for both groups
 
     def test_no_wire_file_falls_back_to_export_time(self, tmp_path: Path):
         """Without wire.jsonl, only group 2 (export time) applies."""
         log_dir = self._setup_log_dir(tmp_path)
         now = time.time()
-        self._make_log(log_dir, "kimi.log", now - 3600)
+        self._make_log(log_dir, "pc-kimi.log", now - 3600)
         self._make_log(log_dir, "kimi.old.log", now - 5 * 86400)
 
         session_dir = tmp_path / "session"
@@ -140,12 +140,12 @@ class TestCollectRecentLogFiles:
             files = _collect_recent_log_files(session_dir)
 
         names = {f.name for f in files}
-        assert "kimi.log" in names
+        assert "pc-kimi.log" in names
         assert "kimi.old.log" not in names
 
     def test_ignores_non_log_files(self, tmp_path: Path):
         log_dir = self._setup_log_dir(tmp_path)
-        (log_dir / "kimi.log").write_text("log")
+        (log_dir / "pc-kimi.log").write_text("log")
         (log_dir / ".DS_Store").write_bytes(b"\x00")
         (log_dir / "notes.txt").write_text("not a log")
 
@@ -156,7 +156,7 @@ class TestCollectRecentLogFiles:
             files = _collect_recent_log_files(session_dir)
 
         names = {f.name for f in files}
-        assert names == {"kimi.log"}
+        assert names == {"pc-kimi.log"}
 
     def test_empty_log_dir(self, tmp_path: Path):
         self._setup_log_dir(tmp_path)

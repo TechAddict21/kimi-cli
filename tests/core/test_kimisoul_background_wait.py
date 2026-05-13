@@ -1015,7 +1015,7 @@ async def test_print_wait_timeout_writes_to_original_stderr_when_redirected(
 ) -> None:
     """When stderr is redirected to the logger, the "timed out ... killed N"
     notice must still reach the user's terminal via ``open_original_stderr``,
-    not disappear into ``kimi.log``."""
+    not disappear into ``pc-kimi.log``."""
     import contextlib
     import io
 

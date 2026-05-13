@@ -107,7 +107,7 @@ def _start_wire(config_path: Path, work_dir: Path) -> subprocess.Popen[str]:
     cmd = [
         "uv",
         "run",
-        "kimi",
+        "pc-kimi",
         "--wire",
         "--yolo",
         "--config-file",

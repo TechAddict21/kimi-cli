@@ -8,6 +8,13 @@ from typing import TYPE_CHECKING, cast
 
 NAME = "Kimi Code CLI"
 
+# User-facing constants — single source of truth for the share directory and CLI
+# command names so that downstream code never hardcodes them.
+SHARE_DIR_NAME = ".pc-kimi"
+CLI_COMMAND = "pc-kimi"
+CLI_COMMAND_ALT = "pc-kimi-cli"
+LOG_FILE_NAME = f"{CLI_COMMAND}.log"
+
 if TYPE_CHECKING:
     VERSION: str
     USER_AGENT: str

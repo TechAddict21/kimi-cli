@@ -293,7 +293,7 @@ class Print:
                             # ``sys.stderr`` has been redirected to the
                             # logger pipe at this point in the CLI
                             # lifecycle, so writing directly to it would
-                            # silently land in ``kimi.log``.  Use the
+                            # silently land in ``pc-kimi.log``.  Use the
                             # pre-redirect fd to surface the notice on the
                             # user's terminal.
                             timeout_notice = (

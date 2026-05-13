@@ -57,8 +57,10 @@ def enable_logging(debug: bool = False, *, redirect_stderr: bool = True) -> None
     logger.enable("kimi_cli")
     if debug:
         logger.enable("kosong")
+    from kimi_cli.constant import LOG_FILE_NAME
+
     logger.add(
-        get_share_dir() / "logs" / "kimi.log",
+        get_share_dir() / "logs" / LOG_FILE_NAME,
         # FIXME: configure level for different modules
         level="TRACE" if debug else "INFO",
         format=(
@@ -755,16 +757,6 @@ class KimiCLI:
                         level=WelcomeInfoItem.Level.WARN,
                     )
                 )
-        welcome_info.append(
-            WelcomeInfoItem(
-                name="\nTip",
-                value=(
-                    "Spot a bug or have feedback? Type /feedback right in this session"
-                    " — every report makes Kimi better."
-                ),
-                level=WelcomeInfoItem.Level.INFO,
-            )
-        )
         async with self._env():
             shell = Shell(self._soul, welcome_info=welcome_info, prefill_text=prefill_text)
             return await shell.run(command)

@@ -17,6 +17,7 @@ from kimi_cli.approval_runtime import ApprovalRuntime
 from kimi_cli.auth.oauth import OAuthManager
 from kimi_cli.background import BackgroundTaskManager
 from kimi_cli.config import Config
+from kimi_cli.constant import SHARE_DIR_NAME
 from kimi_cli.exception import MCPConfigError, SystemPromptTemplateError
 from kimi_cli.llm import LLM
 from kimi_cli.notifications import NotificationManager
@@ -89,12 +90,12 @@ async def load_agents_md(work_dir: KaosPath) -> str | None:
 
     For each directory on the path, the following candidates are checked in order:
 
-    1. ``.kimi/AGENTS.md``  — project-local kimi config (highest priority)
+    1. ``.pc-kimi/AGENTS.md``  — project-local kimi config (highest priority)
     2. ``AGENTS.md``        — standard location
     3. ``agents.md``        — lowercase variant (mutually exclusive with 2)
 
-    Within a single directory, ``.kimi/AGENTS.md`` and ``AGENTS.md``/``agents.md``
-    are **both** loaded (with ``.kimi/`` first), but ``AGENTS.md`` and ``agents.md``
+    Within a single directory, ``.pc-kimi/AGENTS.md`` and ``AGENTS.md``/``agents.md``
+    are **both** loaded (with ``.pc-kimi/`` first), but ``AGENTS.md`` and ``agents.md``
     are mutually exclusive (uppercase wins).
 
     All discovered files are concatenated root→leaf, separated by ``\\n\\n``, with
@@ -108,8 +109,9 @@ async def load_agents_md(work_dir: KaosPath) -> str | None:
     # Phase 1: collect all candidate files (root → leaf order)
     discovered: list[tuple[KaosPath, str]] = []  # (path, content)
     for d in dirs:
-        # .kimi/AGENTS.md is always checked independently (can coexist with root-level file)
-        kimi_path = d / ".kimi" / "AGENTS.md"
+        # {SHARE_DIR_NAME}/AGENTS.md is always checked independently
+        # (can coexist with root-level file)
+        kimi_path = d / SHARE_DIR_NAME / "AGENTS.md"
         # AGENTS.md and agents.md are mutually exclusive (uppercase wins)
         root_candidates = [d / "AGENTS.md", d / "agents.md"]
 

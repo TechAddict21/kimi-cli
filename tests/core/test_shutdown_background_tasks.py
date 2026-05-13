@@ -181,7 +181,7 @@ async def test_shutdown_reports_survivors_after_grace(capsys) -> None:
 async def test_shutdown_writes_to_original_stderr_when_redirected(monkeypatch) -> None:
     """When stderr has been redirected to the logger via ``redirect_stderr_to_logger``,
     the kill notice must still reach the user's terminal.  ``sys.stderr.write``
-    alone would silently send the notice into ``kimi.log`` (where fd=2 now
+    alone would silently send the notice into ``pc-kimi.log`` (where fd=2 now
     points), leaving the user with zero feedback about what was killed.
 
     The fix uses ``open_original_stderr`` (same pattern as ``_emit_fatal_error``

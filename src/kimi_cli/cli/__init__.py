@@ -8,6 +8,8 @@ import typer
 if TYPE_CHECKING:
     from kimi_cli.session import Session
 
+from kimi_cli.constant import CLI_COMMAND, LOG_FILE_NAME, SHARE_DIR_NAME
+
 from ._lazy_group import LazySubcommandGroup
 
 
@@ -167,7 +169,7 @@ def kimi(
             file_okay=True,
             dir_okay=False,
             readable=True,
-            help="Config TOML/JSON file to load. Default: ~/.kimi/config.toml.",
+            help=f"Config TOML/JSON file to load. Default: ~/{SHARE_DIR_NAME}/config.toml.",
         ),
     ] = None,
     model_name: Annotated[
@@ -866,12 +868,13 @@ def kimi(
         else:
             from kimi_cli.share import get_share_dir
 
-            log_path = get_share_dir() / "logs" / "kimi.log"
+            log_path = get_share_dir() / "logs" / LOG_FILE_NAME
             # In non-debug mode, print a concise error and point users to logs.
             _emit_fatal_error(
                 f"{exc}\n"
                 f"See logs: {log_path}\n"
-                "Run with --debug for full traceback, or run kimi export to share diagnostics."
+                f"Run with --debug for full traceback, or run "
+                f"{CLI_COMMAND} export to share diagnostics."
             )
         raise typer.Exit(code=1) from exc
     if switch_target in ("web", "vis"):

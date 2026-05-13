@@ -1,7 +1,7 @@
 # tests_e2e Wire E2E Guide
 
 ## Goals and Scope
-- Test only `kimi --wire` JSON-RPC + wire messages; no Shell UI/Print/ACP/Term/shortcuts.
+- Test only `pc-kimi --wire` JSON-RPC + wire messages; no Shell UI/Print/ACP/Term/shortcuts.
 - Do not test `--agent okabe`.
 - Do not test: W-23, W-26, W-29, W-27 (env overrides).
 

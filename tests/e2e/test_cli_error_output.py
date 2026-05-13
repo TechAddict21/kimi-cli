@@ -100,14 +100,14 @@ def test_invalid_config_toml_is_reported(tmp_path: Path) -> None:
         share_dir=share_dir,
     )
 
-    log_path = share_dir / "logs" / "kimi.log"
+    log_path = share_dir / "logs" / "pc-kimi.log"
     assert result.returncode == snapshot(1)
     assert result.stdout == snapshot("")
     assert _normalize_cli_error_output(result.stderr) == snapshot(
         f"""\
 Invalid TOML in configuration file {config_path}: Invalid key "this is not toml" at line 1 col 17
 See logs: {log_path}
-Run with --debug for full traceback, or run kimi export to share diagnostics.
+Run with --debug for full traceback, or run pc-kimi export to share diagnostics.
 """
     )
 

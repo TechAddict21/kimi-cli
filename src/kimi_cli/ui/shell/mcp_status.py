@@ -7,6 +7,7 @@ from rich.console import Group, RenderableType
 from rich.spinner import Spinner
 from rich.text import Text
 
+from kimi_cli.constant import CLI_COMMAND
 from kimi_cli.ui.theme import get_mcp_prompt_colors
 from kimi_cli.utils.rich.columns import BulletColumns
 from kimi_cli.wire.types import MCPServerSnapshot, MCPStatusSnapshot
@@ -26,7 +27,9 @@ def render_mcp_console(snapshot: MCPStatusSnapshot) -> RenderableType:
         color = _status_color(server.status)
         server_text = f"[{color}]{server.name}[/{color}]"
         if server.status == "unauthorized":
-            server_text += f" [grey50](unauthorized - run: kimi mcp auth {server.name})[/grey50]"
+            server_text += (
+                f" [grey50](unauthorized - run: {CLI_COMMAND} mcp auth {server.name})[/grey50]"
+            )
         elif server.status != "connected":
             server_text += f" [grey50]({server.status})[/grey50]"
 
@@ -99,7 +102,7 @@ def _prompt_status_style(status: str) -> str:
 
 def _prompt_server_detail(server: MCPServerSnapshot) -> str:
     if server.status == "unauthorized":
-        return f" (unauthorized - run: kimi mcp auth {server.name})"
+        return f" (unauthorized - run: {CLI_COMMAND} mcp auth {server.name})"
 
     parts: list[str] = []
     if server.status != "connected":

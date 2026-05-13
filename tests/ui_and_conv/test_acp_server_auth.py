@@ -20,7 +20,7 @@ def server() -> ACPServer:
             field_meta={
                 "terminal-auth": {
                     "type": "terminal",
-                    "args": ["kimi", "login"],
+                    "args": ["pc-kimi", "login"],
                     "env": {},
                 }
             },

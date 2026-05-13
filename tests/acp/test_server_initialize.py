@@ -15,15 +15,15 @@ pytestmark = pytest.mark.asyncio
     "argv, expected_command, expected_terminal_args",
     [
         # Standard entry-point: kimi acp
-        (["/usr/local/bin/kimi", "acp"], "/usr/local/bin/kimi", ["login"]),
+        (["/usr/local/bin/pc-kimi", "acp"], "/usr/local/bin/pc-kimi", ["login"]),
         # kimi-code entry-point (JetBrains scenario)
-        (["/usr/local/bin/kimi-code", "acp"], "/usr/local/bin/kimi-code", ["login"]),
+        (["/usr/local/bin/pc-kimi-code", "acp"], "/usr/local/bin/pc-kimi-code", ["login"]),
         # kimi-cli entry-point
-        (["/usr/local/bin/kimi-cli", "acp"], "/usr/local/bin/kimi-cli", ["login"]),
+        (["/usr/local/bin/pc-kimi-cli", "acp"], "/usr/local/bin/pc-kimi-cli", ["login"]),
         # Arbitrary wrapper script
         (["/opt/wrapper.sh", "acp"], "/opt/wrapper.sh", ["login"]),
     ],
-    ids=["kimi", "kimi-code", "kimi-cli", "wrapper-script"],
+    ids=["pc-kimi", "pc-kimi-code", "pc-kimi-cli", "wrapper-script"],
 )
 async def test_initialize_argv_handling(
     argv: list[str],

@@ -16,6 +16,7 @@ from pathlib import Path
 
 import aiohttp
 
+from kimi_cli.constant import CLI_COMMAND, CLI_COMMAND_ALT
 from kimi_cli.share import get_share_dir
 from kimi_cli.ui.shell.console import console
 from kimi_cli.utils.aiohttp import new_client_session
@@ -26,7 +27,7 @@ LATEST_VERSION_URL = f"{BASE_URL}/latest"
 INSTALL_DIR = Path.home() / ".local" / "bin"
 
 # Upgrade command shown in toast notifications. Can be overridden by wrappers
-UPGRADE_COMMAND = "uv tool upgrade kimi-cli"
+UPGRADE_COMMAND = f"uv tool upgrade {CLI_COMMAND_ALT}"
 
 
 class UpdateResult(Enum):
@@ -171,7 +172,7 @@ def _run_update_gate(current_version: str, latest_version: str) -> None:
     console.print(
         Panel(
             body,
-            title="[bold]kimi-cli update available[/bold]",
+            title=f"[bold]{CLI_COMMAND_ALT} update available[/bold]",
             border_style="yellow",
             expand=False,
             padding=(1, 2),
@@ -207,7 +208,9 @@ def _run_update_gate(current_version: str, latest_version: str) -> None:
             sys.exit(1)
         console.print()
         if result.returncode == 0:
-            console.print("[green]Upgrade complete! Run kimi-cli to start the new version.[/green]")
+            console.print(
+                f"[green]Upgrade complete! Run {CLI_COMMAND_ALT} to start the new version.[/green]"
+            )
         else:
             console.print("[red]Upgrade failed. Please try running manually:[/red]")
             console.print(f"  {UPGRADE_COMMAND}")
@@ -273,7 +276,7 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
         filename = f"kimi-{latest_version}-{target}.tar.gz"
         download_url = f"{BASE_URL}/{latest_version}/{filename}"
 
-        with tempfile.TemporaryDirectory(prefix="kimi-cli-") as tmpdir:
+        with tempfile.TemporaryDirectory(prefix=f"{CLI_COMMAND_ALT}-") as tmpdir:
             tar_path = os.path.join(tmpdir, filename)
 
             logger.info("Downloading from {download_url}...", download_url=download_url)
@@ -304,12 +307,15 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
                     tar.extractall(tmpdir)
                 binary_path = None
                 for root, _, files in os.walk(tmpdir):
+                    if CLI_COMMAND in files:
+                        binary_path = os.path.join(root, CLI_COMMAND)
+                        break
                     if "kimi" in files:
                         binary_path = os.path.join(root, "kimi")
                         break
                 if not binary_path:
-                    logger.error("Binary 'kimi' not found in archive.")
-                    _print("[red]Binary 'kimi' not found in archive.[/red]")
+                    logger.error(f"Binary '{CLI_COMMAND}' not found in archive.")
+                    _print(f"[red]Binary '{CLI_COMMAND}' not found in archive.[/red]")
                     return UpdateResult.FAILED
             except Exception:
                 logger.exception("Failed to extract archive:")
@@ -317,7 +323,7 @@ async def _do_update(*, print: bool, check_only: bool) -> UpdateResult:
                 return UpdateResult.FAILED
 
             INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-            dest_path = INSTALL_DIR / "kimi"
+            dest_path = INSTALL_DIR / CLI_COMMAND
             logger.info("Installing to {dest_path}...", dest_path=dest_path)
             _print("[grey50]Installing...[/grey50]")
 
