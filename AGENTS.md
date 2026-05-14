@@ -103,7 +103,7 @@ shell UI, ACP server mode for IDE integrations, and MCP tool loading.
 - Ruff handles lint + format (rules: E, F, UP, B, SIM, I); pyright + ty for type checks.
 - Tests use pytest + pytest-asyncio; files are `tests/test_*.py`.
 - CLI entry points: `kimi` / `kimi-cli` -> `src/kimi_cli/__main__.py` (routes to `src/kimi_cli/cli/__init__.py`).
-- User config: `~/.kimi/config.toml`; logs, sessions, and MCP config live in `~/.kimi/`.
+- User config: `~/.pc-kimi/config.toml`; logs, sessions, and MCP config live in `~/.pc-kimi/`.
 
 ## Git commit messages
 

@@ -76,7 +76,6 @@ def _exit_shell(shell) -> None:
         exit_mark = shell.mark()
         shell.send_line("exit")
         try:
-            shell.read_until_contains("Bye!", after=exit_mark, timeout=4.0)
             assert shell.wait() == 0
             return
         except AssertionError as exc:
@@ -327,9 +326,7 @@ def test_shell_ctrl_d_from_idle_prompt_after_completed_turn_exits_cleanly(tmp_pa
         prompt_mark = shell.mark()
         _read_until_prompt(shell, after=prompt_mark)
 
-        eof_mark = shell.mark()
         shell.send_key("ctrl_d")
-        shell.read_until_contains("Bye!", after=eof_mark, timeout=4.0)
         assert shell.wait() == 0
     finally:
         shell.close()

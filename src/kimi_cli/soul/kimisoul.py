@@ -61,6 +61,7 @@ from kimi_cli.soul.dynamic_injection import (
 from kimi_cli.soul.dynamic_injections.afk_mode import AfkModeInjectionProvider
 from kimi_cli.soul.dynamic_injections.plan_mode import PlanModeInjectionProvider
 from kimi_cli.soul.message import check_message, system, system_reminder, tool_result_to_message
+from kimi_cli.soul.reviewer import Reviewer
 from kimi_cli.soul.slash import registry as soul_slash_registry
 from kimi_cli.soul.toolset import KimiToolset
 from kimi_cli.tools.dmail import NAME as SendDMail_NAME
@@ -217,6 +218,16 @@ class KimiSoul:
 
         self._slash_commands = self._build_slash_commands()
         self._slash_command_map = self._index_slash_commands(self._slash_commands)
+
+        # Reviewer state
+        self._reviewer_enabled = self._runtime.config.reviewer_enabled
+        self._reviewer = Reviewer(self._runtime) if self._reviewer_enabled else None
+        self._reviewer_iterations = 0
+        if self._reviewer_enabled:
+            logger.info(
+                "Reviewer enabled (max_iterations={max})",
+                max=self._runtime.config.reviewer_max_iterations,
+            )
 
     @property
     def name(self) -> str:
@@ -672,6 +683,9 @@ class KimiSoul:
 
             wire_send(TurnEnd())
             turn_finished = True
+            from kimi_cli.utils.test_logger import write_file_log
+
+            write_file_log("CLI_READY_FOR_INPUT", "Turn complete — ready for new input")
 
             # Auto-set title after first real turn (skip slash commands)
             if not command_call:
@@ -723,6 +737,7 @@ class KimiSoul:
 
         self._current_turn_id = uuid.uuid4().hex
         self._last_tool_calls = []
+        self._reviewer_iterations = 0
 
         await self._checkpoint()  # this creates the checkpoint 0 on first run
         await self._context.append_message(user_message)
@@ -983,6 +998,68 @@ class KimiSoul:
                     if step_outcome.stop_reason == "no_tool_calls"
                     else None
                 )
+
+                # ── Reviewer: check final response before presenting to user ──
+                if (
+                    final_message is not None
+                    and self._reviewer_enabled
+                    and self._reviewer is not None
+                    and self._reviewer_iterations < self._runtime.config.reviewer_max_iterations
+                ):
+                    logger.info(
+                        "Reviewer checking turn (iteration {iteration}/{max})",
+                        iteration=self._reviewer_iterations + 1,
+                        max=self._runtime.config.reviewer_max_iterations,
+                    )
+                    review_result = await self._reviewer.review(self._context, final_message)
+                    self._reviewer_iterations += 1
+                    if review_result is not None:
+                        if review_result.need_changes:
+                            logger.info(
+                                "Reviewer requested changes: {feedback!r}",
+                                feedback=review_result.feedback,
+                            )
+                            feedback_text = (
+                                review_result.feedback
+                                or "Please revise your previous response to address any issues."
+                            )
+                            await self._context.append_message(
+                                Message(
+                                    role="user",
+                                    content=[TextPart(text=feedback_text)],
+                                )
+                            )
+                            continue  # agent will revise
+                        if review_result.refined_response:
+                            logger.info(
+                                "Reviewer provided refined response ({len} chars)",
+                                len=len(review_result.refined_response),
+                            )
+                            final_message = Message(
+                                role="assistant",
+                                content=[TextPart(text=review_result.refined_response)],
+                            )
+                    else:
+                        logger.info("Reviewer returned None (skipped/failed)")
+                elif self._reviewer_enabled and final_message is not None:
+                    logger.info(
+                        "Reviewer max iterations reached ({max}), sending as-is",
+                        max=self._runtime.config.reviewer_max_iterations,
+                    )
+
+                # When reviewer is enabled, send the complete final message now
+                # (streaming was disabled during kosong.step)
+                if self._reviewer_enabled and final_message is not None:
+                    logger.info(
+                        "Sending final message ({n} parts, {chars} chars)",
+                        n=len(final_message.content),
+                        chars=len(final_message.extract_text(" ")),
+                    )
+                    for part in final_message.content:
+                        wire_send(part)
+                elif self._reviewer_enabled:
+                    logger.info("Final message is None, nothing to send")
+
                 return TurnOutcome(
                     stop_reason=step_outcome.stop_reason,
                     final_message=final_message,
@@ -1091,8 +1168,8 @@ class KimiSoul:
                 self._agent.system_prompt,
                 self._agent.toolset,
                 effective_history,
-                on_message_part=wire_send,
-                on_tool_result=wire_send,
+                on_message_part=None if self._reviewer_enabled else wire_send,
+                on_tool_result=None if self._reviewer_enabled else wire_send,
             )
 
         max_attempts = self._loop_control.max_retries_per_step
@@ -1210,6 +1287,18 @@ class KimiSoul:
             )
 
         if result.tool_calls:
+            # When reviewer is enabled, send the complete assistant message and
+            # tool results for non-final steps so the user can follow progress.
+            if self._reviewer_enabled:
+                logger.debug(
+                    "Sending non-final step content ({n_parts} parts, {n_tools} tool results)",
+                    n_parts=len(result.message.content),
+                    n_tools=len(results),
+                )
+                for part in result.message.content:
+                    wire_send(part)
+                for tr in results:
+                    wire_send(tr)
             return None
         return StepOutcome(stop_reason="no_tool_calls", assistant_message=result.message)
 

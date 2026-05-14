@@ -360,6 +360,7 @@ class ACPServer:
             session_id=acp_session.id,
             thinking=model_id_conv.thinking,
             oauth=cli_instance.soul.runtime.oauth,
+            stream=True,
         )
         cli_instance.soul.runtime.llm = new_llm
 

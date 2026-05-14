@@ -116,7 +116,7 @@ async def test_shell_run_treats_hidden_slash_in_placeholder_as_regular_agent_inp
     assert _FakePromptSession.instances[0].prompt_calls == 2
     shell.run_soul_command.assert_awaited_once_with([TextPart(text="/quit\nstill send this")])
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["✨ [Pasted text #1 +3 lines]", "", "", "Bye!"]
+    assert printed == ["✨ [Pasted text #1 +3 lines]", "", ""]
 
 
 @pytest.mark.asyncio
@@ -150,7 +150,7 @@ async def test_shell_run_dispatches_visible_slash_with_expanded_placeholder_args
     assert command_call.name == "fakecmd"
     assert command_call.args == "line1\nline2\nline3"
     assert command_call.raw_input == "/fakecmd line1\nline2\nline3"
-    assert printed == ["Bye!"]
+    assert printed == []
 
 
 @pytest.mark.asyncio
@@ -185,7 +185,7 @@ async def test_shell_run_echoes_visible_skill_slash_with_placeholder_before_disp
     assert _FakePromptSession.instances[0].prompt_calls == 2
     shell.run_soul_command.assert_awaited_once_with("/skill:demo line1\nline2\nline3")
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["✨ /skill:demo [Pasted text #1 +3 lines]", "", "", "Bye!"]
+    assert printed == ["✨ /skill:demo [Pasted text #1 +3 lines]", "", ""]
 
 
 @pytest.mark.asyncio
@@ -220,7 +220,7 @@ async def test_shell_run_echoes_visible_flow_slash_with_placeholder_before_dispa
     assert _FakePromptSession.instances[0].prompt_calls == 2
     shell.run_soul_command.assert_awaited_once_with("/flow:demo line1\nline2\nline3")
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["✨ /flow:demo [Pasted text #1 +3 lines]", "", "", "Bye!"]
+    assert printed == ["✨ /flow:demo [Pasted text #1 +3 lines]", "", ""]
 
 
 @pytest.mark.asyncio
@@ -248,7 +248,7 @@ async def test_shell_run_echoes_unregistered_skill_slash_before_unknown_dispatch
     assert result is True
     shell.run_soul_command.assert_not_awaited()
     shell._run_slash_command.assert_awaited_once()
-    assert printed == ["✨ /skill:not-found 修一下登录", "", "Bye!"]
+    assert printed == ["✨ /skill:not-found 修一下登录", ""]
 
 
 @pytest.mark.asyncio
@@ -276,7 +276,7 @@ async def test_shell_run_echoes_unregistered_flow_slash_before_unknown_dispatch(
     assert result is True
     shell.run_soul_command.assert_not_awaited()
     shell._run_slash_command.assert_awaited_once()
-    assert printed == ["✨ /flow:not-found 执行一下", "", "Bye!"]
+    assert printed == ["✨ /flow:not-found 执行一下", ""]
 
 
 @pytest.mark.asyncio
@@ -295,7 +295,7 @@ async def test_shell_run_exits_immediately_for_visible_quit_command(
     assert _FakePromptSession.instances[0].prompt_calls == 1
     shell.run_soul_command.assert_not_awaited()
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["Bye!"]
+    assert printed == []
 
 
 @pytest.mark.asyncio
@@ -316,7 +316,7 @@ async def test_shell_run_exits_immediately_for_visible_exit_command_in_shell_mod
     shell.run_soul_command.assert_not_awaited()
     shell._run_shell_command.assert_not_awaited()
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["Bye!"]
+    assert printed == []
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_shell_run_exits_immediately_for_visible_slash_exit_command_in_she
     shell.run_soul_command.assert_not_awaited()
     shell._run_shell_command.assert_not_awaited()
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["Bye!"]
+    assert printed == []
 
 
 @pytest.mark.asyncio
@@ -358,4 +358,4 @@ async def test_shell_run_exits_immediately_for_visible_slash_quit_command_in_she
     shell.run_soul_command.assert_not_awaited()
     shell._run_shell_command.assert_not_awaited()
     shell._run_slash_command.assert_not_awaited()
-    assert printed == ["Bye!"]
+    assert printed == []

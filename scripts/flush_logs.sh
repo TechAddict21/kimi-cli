@@ -3,11 +3,11 @@
 #
 # This removes:
 #   - Application logs   (default: ~/.pc-kimi/logs/pc-kimi.log + rotated files)
-#   - Test logs          (default: ~/.kimi/logs/test_logs.jsonl)
+#   - Test logs          (default: ~/.pc-kimi/logs/test_logs.jsonl)
 #
 # Environment variables respected:
 #   KIMI_SHARE_DIR      - overrides the share directory (default: ~/.pc-kimi)
-#   KIMI_TEST_LOG_FILE  - overrides the test log file  (default: ~/.kimi/logs/test_logs.jsonl)
+#   KIMI_TEST_LOG_FILE  - overrides the test log file  (default: ~/.pc-kimi/logs/test_logs.jsonl)
 #
 # Usage:
 #   ./scripts/flush_logs.sh        # delete logs
@@ -21,7 +21,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 SHARE_DIR="${KIMI_SHARE_DIR:-$HOME/.pc-kimi}"
-TEST_LOG_FILE="${KIMI_TEST_LOG_FILE:-$HOME/.kimi/logs/test_logs.jsonl}"
+TEST_LOG_FILE="${KIMI_TEST_LOG_FILE:-$HOME/.pc-kimi/logs/test_logs.jsonl}"
 
 # Gather candidate log files
 LOG_FILES=()
@@ -52,6 +52,18 @@ fi
 LEGACY_LOG_DIR="$HOME/.kimi/logs"
 if [[ -d "$LEGACY_LOG_DIR" ]]; then
     for f in "$LEGACY_LOG_DIR"/kimi.log "$LEGACY_LOG_DIR"/kimi.*.log; do
+        if [[ -f "$f" ]]; then
+            LOG_FILES+=("$f")
+        fi
+    done
+fi
+
+# 4. Legacy test logs at old default path (older installs)
+LEGACY_TEST_LOG="$HOME/.kimi/logs/test_logs.jsonl"
+if [[ -f "$LEGACY_TEST_LOG" ]]; then
+    LOG_FILES+=("$LEGACY_TEST_LOG")
+    LEGACY_TEST_LOG_DIR=$(dirname "$LEGACY_TEST_LOG")
+    for f in "$LEGACY_TEST_LOG_DIR"/test_logs.*.jsonl; do
         if [[ -f "$f" ]]; then
             LOG_FILES+=("$f")
         fi

@@ -207,6 +207,13 @@ class Config(BaseModel):
         ),
     )
     default_plan_mode: bool = Field(default=False, description="Default plan mode for new sessions")
+    reviewer_enabled: bool = Field(
+        default=False, description="Enable reviewer flow before final response"
+    )
+    reviewer_max_iterations: int = Field(
+        default=3, description="Maximum reviewer iterations per turn"
+    )
+    stream: bool = Field(default=False, description="Enable streaming responses from the LLM")
     default_editor: str = Field(
         default="",
         description="Default external editor command (e.g. 'vim', 'code --wait')",

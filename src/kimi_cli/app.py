@@ -132,6 +132,7 @@ class KimiCLI:
         afk: bool = False,
         runtime_afk: bool = False,
         plan_mode: bool = False,
+        reviewer: bool = False,
         resumed: bool = False,
         ui_mode: str = "shell",
         # Extensions
@@ -240,12 +241,20 @@ class KimiCLI:
         if not resumed:
             plan_mode = plan_mode if plan_mode else config.default_plan_mode
 
+        # determine reviewer mode
+        if reviewer:
+            config.reviewer_enabled = True
+
+        # reviewer requires non-streaming mode
+        stream = config.stream and not config.reviewer_enabled
+
         llm = create_llm(
             provider,
             model,
             thinking=thinking,
             session_id=session.id,
             oauth=oauth,
+            stream=stream,
         )
 
         if startup_progress is not None:

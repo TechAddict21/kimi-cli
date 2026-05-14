@@ -113,6 +113,7 @@ def create_llm(
     thinking: bool | None = None,
     session_id: str | None = None,
     oauth: OAuthManager | None = None,
+    stream: bool = True,
 ) -> LLM | None:
     if provider.type not in {"_echo", "_scripted_echo"} and (
         not provider.base_url or not model.model
@@ -137,6 +138,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 default_headers=_kimi_default_headers(provider, oauth),
             )
 
@@ -164,6 +166,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 reasoning_key=reasoning_key,
                 default_headers=dict(provider.custom_headers) if provider.custom_headers else None,
             )
@@ -174,6 +177,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 default_headers=dict(provider.custom_headers) if provider.custom_headers else None,
             )
         case "anthropic":
@@ -183,6 +187,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 default_max_tokens=50000,
                 metadata={"user_id": session_id} if session_id else None,
                 default_headers=dict(provider.custom_headers) if provider.custom_headers else None,
@@ -194,6 +199,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 default_headers=dict(provider.custom_headers) if provider.custom_headers else None,
             )
         case "vertexai":
@@ -204,6 +210,7 @@ def create_llm(
                 model=model.model,
                 base_url=provider.base_url,
                 api_key=resolved_api_key,
+                stream=stream,
                 vertexai=True,
                 default_headers=dict(provider.custom_headers) if provider.custom_headers else None,
             )
@@ -294,6 +301,11 @@ def clone_llm_with_model_alias(
         thinking=thinking,
         session_id=session_id,
         oauth=oauth,
+        stream=(
+            getattr(llm.chat_provider, "stream", getattr(llm.chat_provider, "_stream", True))
+            if llm is not None
+            else True
+        ),
     )
 
 

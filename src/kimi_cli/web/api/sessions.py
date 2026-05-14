@@ -821,7 +821,7 @@ async def generate_session_title(
             if provider_config:
                 oauth = OAuthManager(config)
                 await oauth.ensure_fresh()
-                llm = create_llm(provider_config, model_config, oauth=oauth)
+                llm = create_llm(provider_config, model_config, oauth=oauth, stream=True)
 
                 if llm:
                     system_prompt = (

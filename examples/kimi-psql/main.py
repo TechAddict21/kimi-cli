@@ -354,7 +354,7 @@ class PsqlShell:
                 else:
                     await self._run_psql_mode()
         except KeyboardInterrupt:
-            console.print("\n[grey50]Bye![/grey50]")
+            console.print("\n[grey50]Error![/grey50]")
         finally:
             self._psql_process.stop()
 

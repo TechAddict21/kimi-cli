@@ -216,6 +216,13 @@ def kimi(
             ),
         ),
     ] = False,
+    reviewer: Annotated[
+        bool,
+        typer.Option(
+            "--reviewer/--no-reviewer",
+            help="Enable reviewer flow. Default: config setting.",
+        ),
+    ] = False,
     prompt: Annotated[
         str | None,
         typer.Option(
@@ -625,6 +632,7 @@ def kimi(
                 afk=afk,
                 runtime_afk=ui == "print",
                 plan_mode=plan,
+                reviewer=reviewer,
                 resumed=resumed,
                 agent_file=agent_file,
                 mcp_configs=mcp_configs,

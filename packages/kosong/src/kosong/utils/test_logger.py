@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-_DEFAULT_LOG_PATH = Path.home() / ".kimi" / "logs" / "test_logs.jsonl"
+_DEFAULT_LOG_PATH = Path.home() / ".pc-kimi" / "logs" / "test_logs.jsonl"
 
 
 def _get_test_log_path() -> Path:

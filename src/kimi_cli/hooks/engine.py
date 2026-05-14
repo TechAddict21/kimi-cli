@@ -11,6 +11,7 @@ from typing import Any
 from kimi_cli import logger
 from kimi_cli.hooks.config import HookDef, HookEventType
 from kimi_cli.hooks.runner import HookResult, run_hook
+from kimi_cli.utils.test_logger import write_file_log
 
 # Callback signatures for wire integration
 type OnTriggered = Callable[[str, str, int], None]
@@ -333,6 +334,53 @@ class HookEngine:
                     event=event,
                     error=e,
                 )
+
+        # --- Debug file log ---
+        import json
+
+        write_file_log(
+            f"HOOK_{event}",
+            json.dumps(
+                {
+                    "matcher_value": matcher_value,
+                    "input_data": input_data,
+                    "hooks": [
+                        {
+                            "command": h.command,
+                            "matcher": h.matcher,
+                            "source": "server",
+                            "timeout": h.timeout,
+                        }
+                        for h in server_matched
+                    ]
+                    + [
+                        {
+                            "command": "(client-side)",
+                            "matcher": s.matcher,
+                            "source": "wire",
+                            "timeout": s.timeout,
+                        }
+                        for s in wire_matched
+                    ],
+                    "results": [
+                        {
+                            "action": r.action,
+                            "reason": r.reason,
+                            "exit_code": r.exit_code,
+                            "timed_out": r.timed_out,
+                            "stdout": r.stdout,
+                            "stderr": r.stderr,
+                        }
+                        for r in results
+                    ],
+                    "aggregated_action": action,
+                    "aggregated_reason": reason,
+                    "duration_ms": duration_ms,
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+        )
 
         return results
 
