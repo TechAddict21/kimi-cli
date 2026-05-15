@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -30,11 +32,15 @@ class ReviewResult:
     """A refined version of the response when only minor fixes are needed."""
 
 
+type LogFunc = Callable[[str, str], None]
+
+
 class Reviewer:
     """Reviews the agent's final response before presenting it to the user."""
 
-    def __init__(self, runtime: Runtime) -> None:
+    def __init__(self, runtime: Runtime, *, log_func: LogFunc | None = None) -> None:
         self._runtime = runtime
+        self._log_func = log_func or write_file_log
 
     async def review(self, context: Context, final_message: Message) -> ReviewResult | None:
         """Review the final assistant message.
@@ -54,20 +60,23 @@ class Reviewer:
         review_prompt = REVIEWER.format(history_text=history_text, final_text=final_text)
 
         logger.info("Reviewer starting review for turn")
-        write_file_log("REVIEWER_PROMPT", review_prompt)
+        self._log_func("REVIEWER_PROMPT", review_prompt)
 
         messages = [Message(role="user", content=[TextPart(text=review_prompt)])]
 
         try:
-            result = await generate(
-                llm.chat_provider,
-                "You are a helpful code reviewer. Respond only with valid JSON.",
-                [],
-                messages,
+            result = await asyncio.wait_for(
+                generate(
+                    llm.chat_provider,
+                    "You are a helpful code reviewer. Respond only with valid JSON.",
+                    [],
+                    messages,
+                ),
+                timeout=60.0,
             )
             raw = result.message.extract_text(" ").strip()
             logger.info("Reviewer raw response: {raw!r}", raw=raw)
-            write_file_log("REVIEWER_RAW_RESPONSE", raw)
+            self._log_func("REVIEWER_RAW_RESPONSE", raw)
 
             # Strip markdown code fences if present
             if raw.startswith("```"):
@@ -90,7 +99,7 @@ class Reviewer:
                 has_feedback=bool(review_result.feedback),
                 has_refined=bool(review_result.refined_response),
             )
-            write_file_log(
+            self._log_func(
                 "REVIEWER_RESULT",
                 json.dumps(
                     {
@@ -104,5 +113,5 @@ class Reviewer:
             return review_result
         except Exception as exc:
             logger.warning("Reviewer failed: {error}", error=exc)
-            write_file_log("REVIEWER_ERROR", str(exc))
+            self._log_func("REVIEWER_ERROR", str(exc))
             return None

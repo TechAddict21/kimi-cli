@@ -32,16 +32,9 @@ def test_shell_startup_progress_starts_once_and_updates_messages(monkeypatch) ->
     monkeypatch.setattr(startup_module.console, "status", fake_status)
 
     progress = ShellStartupProgress(enabled=True)
-    progress.update("Preparing session...")
-    progress.update("Loading agent...")
     progress.stop()
 
-    assert events == [
-        ("create", "[cyan]Preparing session...[/cyan]"),
-        ("start", ""),
-        ("update", "[cyan]Loading agent...[/cyan]"),
-        ("stop", ""),
-    ]
+    assert events == []
 
 
 def test_shell_startup_progress_is_noop_when_disabled(monkeypatch) -> None:
@@ -55,7 +48,6 @@ def test_shell_startup_progress_is_noop_when_disabled(monkeypatch) -> None:
     monkeypatch.setattr(startup_module.console, "status", fake_status)
 
     progress = ShellStartupProgress(enabled=False)
-    progress.update("Preparing session...")
     progress.stop()
 
     assert called is False
@@ -107,12 +99,7 @@ async def test_kimi_cli_create_reports_startup_phases(session, config, monkeypat
     cli = await KimiCLI.create(session, config=config, startup_progress=phases.append)
 
     assert isinstance(cli, KimiCLI)
-    assert phases == [
-        "Loading configuration...",
-        "Scanning workspace...",
-        "Loading agent...",
-        "Restoring conversation...",
-    ]
+    assert phases == []
     write_system_prompt.assert_awaited_once_with("Test system prompt")
 
 

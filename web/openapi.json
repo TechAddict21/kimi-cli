@@ -5,8 +5,8 @@
     "/api/config/": {
       "get": {
         "tags": ["config"],
-        "summary": "Get global (kimi-cli) config snapshot",
-        "description": "Get global (kimi-cli) config snapshot.",
+        "summary": "Get global (pc-kimi-cli) config snapshot",
+        "description": "Get global (pc-kimi-cli) config snapshot."
         "operationId": "get_global_config_api_config__get",
         "responses": {
           "200": {
@@ -21,8 +21,8 @@
       },
       "patch": {
         "tags": ["config"],
-        "summary": "Update global (kimi-cli) default model/thinking",
-        "description": "Update global (kimi-cli) default model/thinking.",
+        "summary": "Update global (pc-kimi-cli) default model/thinking",
+        "description": "Update global (pc-kimi-cli) default model/thinking."
         "operationId": "update_global_config_api_config__patch",
         "requestBody": {
           "content": {
@@ -59,8 +59,8 @@
     "/api/config/toml": {
       "get": {
         "tags": ["config"],
-        "summary": "Get kimi-cli config.toml",
-        "description": "Get kimi-cli config.toml.",
+        "summary": "Get pc-kimi-cli config.toml",
+        "description": "Get pc-kimi-cli config.toml."
         "operationId": "get_config_toml_api_config_toml_get",
         "responses": {
           "200": {
@@ -75,8 +75,8 @@
       },
       "put": {
         "tags": ["config"],
-        "summary": "Update kimi-cli config.toml",
-        "description": "Update kimi-cli config.toml.",
+        "summary": "Update pc-kimi-cli config.toml",
+        "description": "Update pc-kimi-cli config.toml."
         "operationId": "update_config_toml_api_config_toml_put",
         "requestBody": {
           "content": {
@@ -680,7 +680,7 @@
           "name": {
             "type": "string",
             "title": "Name",
-            "description": "Model key in kimi-cli config (Config.models)"
+            "description": "Model key in pc-kimi-cli config (Config.models)"
           },
           "provider_type": {
             "$ref": "#/components/schemas/ProviderType",
@@ -925,7 +925,7 @@
           "title": {
             "type": "string",
             "title": "Title",
-            "description": "Session title derived from kimi-cli history"
+            "description": "Session title derived from pc-kimi-cli history"
           },
           "last_updated": {
             "type": "string",

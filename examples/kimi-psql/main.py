@@ -262,7 +262,7 @@ class PsqlMode(Enum):
 
 async def create_psql_soul(llm: LLM | None, conninfo: str) -> KimiSoul:
     """Create a KimiSoul configured for PostgreSQL with ExecuteSql tool
-    and standard kimi-cli tools."""
+    and standard pc-kimi-cli tools."""
     from typing import cast
 
     from kimi_cli.config import load_config
@@ -403,7 +403,7 @@ class PsqlShell:
         if user_input.lower() in ["exit", "quit", "\\q"]:
             raise KeyboardInterrupt
 
-        # Run soul with visualize (same as kimi-cli shell)
+        # Run soul with visualize (same as pc-kimi-cli shell)
         cancel_event = asyncio.Event()
 
         try:
@@ -584,7 +584,7 @@ async def _run_async(
             conninfo_parts.append(f"dbname={dbname}")
         conninfo_str = " ".join(conninfo_parts)
 
-    # Load config (same as kimi-cli)
+    # Load config (same as pc-kimi-cli)
     config = load_config(config_file)
 
     model: LLMModel | None = None

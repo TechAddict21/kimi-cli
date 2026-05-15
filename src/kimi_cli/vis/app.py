@@ -143,7 +143,7 @@ def run_vis_server(
         banner_lines.extend(
             [
                 "<nowrap>  This feature is in Technical Preview and may be unstable.",
-                "<nowrap>  Please report issues to the kimi-cli team.",
+                "<nowrap>  Please report issues to the pc-kimi-cli team.",
                 "",
             ]
         )

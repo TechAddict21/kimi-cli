@@ -164,3 +164,13 @@ gen-docs: ## Generate user docs with Kimi Code CLI.
 	@uv run kimi --yolo --prompt /skill:gen-docs
 
 include src/kimi_cli/deps/Makefile
+
+# for analytics-web development
+.PHONY: analytics-back analytics-front
+analytics-back: ## Start analytics-web backend with uvicorn (reload enabled).
+	@uv run uvicorn analytics_web.app:create_app --factory --reload --port 5496 --app-dir packages/analytics-web/src
+analytics-front: ## Start analytics-web frontend (vite dev server).
+	@npm --prefix packages/analytics-web/frontend run dev
+build-analytics-web: ## Build analytics-web frontend.
+	@echo "==> Building analytics-web UI"
+	@uv run scripts/build_analytics_web.py

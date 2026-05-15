@@ -58,7 +58,7 @@ def invalidate_sessions_cache() -> None:
 
 
 class JointSession(Session):
-    """Combined session model with both web UI and kimi-cli session data."""
+    """Combined session model with both web UI and pc-kimi-cli session data."""
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

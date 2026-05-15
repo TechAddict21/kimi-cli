@@ -1655,7 +1655,7 @@ async def test_cli_skills_dir_wins_over_extra_skill_dirs_same_name(monkeypatch, 
 # ---------------------------------------------------------------------------
 #
 # Before this change, ``find_project_skills_dirs`` only looked directly under
-# the work directory. Launching kimi-cli from a subdirectory of a monorepo
+# the work directory. Launching pc-kimi-cli from a subdirectory of a monorepo
 # therefore missed skills defined at the repository root. These tests lock in
 # the new behaviour: walk up to the nearest ``.git`` ancestor (fallback to the
 # work directory when no marker is found).
@@ -1666,7 +1666,7 @@ async def test_find_project_skills_dirs_walks_up_to_git_root(tmp_path):
     """Project-scope discovery starts at the nearest ``.git`` ancestor.
 
     Launching from a nested subdirectory of a repo must still surface skills
-    defined at the repo root — otherwise running kimi-cli inside a monorepo
+    defined at the repo root — otherwise running pc-kimi-cli inside a monorepo
     package silently loses all project-level skills.
     """
     repo = tmp_path / "repo"

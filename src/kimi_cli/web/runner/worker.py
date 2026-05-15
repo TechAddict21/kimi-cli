@@ -29,7 +29,7 @@ async def run_worker(session_id: UUID) -> None:
     if joint_session is None:
         raise ValueError(f"Session not found: {session_id}")
 
-    # Get the kimi-cli session object
+    # Get the pc-kimi-cli session object
     session = joint_session.kimi_cli_session
 
     # Load default MCP config file if it exists

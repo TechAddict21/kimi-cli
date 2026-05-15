@@ -15,9 +15,9 @@ from kimi_cli.constant import CLI_COMMAND_ALT
 
 
 class GitBashNotFoundError(RuntimeError):
-    """Raised when kimi-cli runs on Windows but cannot locate git-bash.
+    """Raised when pc-kimi-cli runs on Windows but cannot locate git-bash.
 
-    git-bash (from Git for Windows) is required because kimi-cli's Shell tool
+    git-bash (from Git for Windows) is required because pc-kimi-cli's Shell tool
     runs commands through bash, not PowerShell.
     """
 

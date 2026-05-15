@@ -278,7 +278,7 @@ def _credentials_lock_path(key: str) -> Path:
 
 
 class _CrossProcessLock:
-    """File-based lock that coordinates token refresh across kimi-cli processes.
+    """File-based lock that coordinates token refresh across pc-kimi-cli processes.
 
     Uses fcntl.flock on Unix and msvcrt.locking on Windows.
     """
@@ -991,7 +991,7 @@ class OAuthManager:
                 return
 
             # Acquire cross-process file lock to coordinate with other
-            # kimi-cli instances (terminal, VS Code, web).
+            # pc-kimi-cli instances (terminal, VS Code, web).
             xlock = _CrossProcessLock(ref.key)
             acquired = await xlock.acquire_with_retry()
             try:

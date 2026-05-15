@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -270,6 +272,162 @@ async def add_dir(soul: KimiSoul, args: str):
 
     wire_send(TextPart(text=f"Added directory to workspace: {path}"))
     logger.info("Added additional directory: {path}", path=path)
+
+
+def _make_review_log_func(session_id: str):
+    """Create a log function that writes to a unique file for this review invocation."""
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    short_session = session_id[:8]
+    log_path = (
+        Path.home() / ".pc-kimi" / "logs" / "review" / f"review_{timestamp}_{short_session}.jsonl"
+    )
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def log_func(title: str, log_value: str) -> None:
+        entry = {
+            "title": title,
+            "log_value": log_value,
+            "log_time": datetime.now(UTC).isoformat(),
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    return log_func
+
+
+def _rewrite_context_file(soul: KimiSoul, old_msg: Message, new_msg: Message) -> None:
+    """Replace the last assistant message line in the context file with *new_msg*."""
+    file_backend = soul.context._file_backend  # pyright: ignore[reportPrivateUsage]
+    if not file_backend.exists():
+        logger.warning("Context file does not exist; skipping rewrite")
+        return
+
+    try:
+        with open(file_backend, encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError as exc:
+        logger.warning("Failed to read context file for rewrite: {error}", error=exc)
+        return
+
+    old_text = old_msg.extract_text(" ")
+    new_json = new_msg.model_dump_json(exclude_none=True) + "\n"
+    replaced = False
+
+    # Scan backwards to find the last assistant message that matches old_msg content
+    for i in range(len(lines) - 1, -1, -1):
+        line = lines[i].strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if parsed.get("role") == "assistant":
+            # Compare by extracting text to avoid field-order mismatches
+            parsed_text = ""
+            content = parsed.get("content")
+            if isinstance(content, list):
+                for part in content:  # type: ignore[reportUnknownVariableType]
+                    if isinstance(part, dict):
+                        parsed_text += part.get("text", "") + " "  # type: ignore[reportUnknownMemberType]
+            elif isinstance(content, str):
+                parsed_text = content
+            if parsed_text.strip() == old_text.strip():  # type: ignore[reportUnknownMemberType]
+                lines[i] = new_json
+                replaced = True
+                logger.info(
+                    "Replaced assistant message line {line_no} in context file",
+                    line_no=i + 1,
+                )
+                break
+            # If content doesn't match, keep scanning for an earlier assistant msg
+
+    if not replaced:
+        logger.warning("Could not find matching assistant message in context file to replace")
+        return
+
+    try:
+        with open(file_backend, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+        logger.info("Context file rewritten successfully")
+    except OSError as exc:
+        logger.warning("Failed to rewrite context file: {error}", error=exc)
+
+
+@registry.command
+async def review(soul: KimiSoul, args: str):
+    """Manually review the last assistant message. Usage: /review"""
+    from kimi_cli.soul.reviewer import Reviewer
+
+    last_assistant_msg = None
+    for msg in reversed(soul.context.history):
+        if msg.role == "assistant":
+            last_assistant_msg = msg
+            break
+
+    if last_assistant_msg is None:
+        wire_send(TextPart(text="No assistant message found in context to review."))
+        return
+
+    log_func = _make_review_log_func(soul.runtime.session.id)
+    reviewer = Reviewer(soul.runtime, log_func=log_func)
+    result = await reviewer.review(soul.context, last_assistant_msg)
+
+    if result is None:
+        logger.info("Reviewer returned None for /review")
+        return
+
+    if result.refined_response:
+        logger.info(
+            "Reviewer produced refined_response ({chars} chars); applying",
+            chars=len(result.refined_response),
+        )
+        log_func(
+            "REVIEWER_APPLY",
+            f"Applying refined response ({len(result.refined_response)} chars)",
+        )
+
+        # Build replacement message
+        new_msg = Message(
+            role="assistant",
+            content=[TextPart(text=result.refined_response)],
+        )
+
+        # Replace in-memory history
+        replaced_in_memory = False
+        for i in range(len(soul.context._history) - 1, -1, -1):  # pyright: ignore[reportPrivateUsage]
+            if soul.context._history[i].role == "assistant":  # pyright: ignore[reportPrivateUsage]
+                soul.context._history[i] = new_msg  # pyright: ignore[reportPrivateUsage]
+                replaced_in_memory = True
+                logger.info("Replaced assistant message at history index {idx}", idx=i)
+                break
+
+        # Rewrite context file so the fix persists across session resume
+        if replaced_in_memory:
+            _rewrite_context_file(soul, last_assistant_msg, new_msg)
+
+        # Show the corrected response to the user (plain, no meta prefix)
+        wire_send(TextPart(text=result.refined_response))
+        return
+
+    if result.need_changes:
+        logger.info("Reviewer says changes needed: {feedback}", feedback=result.feedback)
+        log_func("REVIEWER_NEED_CHANGES", result.feedback)
+        # Inject feedback as a system reminder so the agent self-corrects on next turn
+        await soul.context.append_message(
+            Message(
+                role="user",
+                content=[
+                    system_reminder(
+                        f"The previous response was reviewed and needs changes: {result.feedback}"
+                    )
+                ],
+            )
+        )
+        return
+
+    logger.info("Reviewer approved — no changes needed")
+    log_func("REVIEWER_APPROVED", "No changes needed")
 
 
 @registry.command

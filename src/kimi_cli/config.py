@@ -197,6 +197,14 @@ class Config(BaseModel):
         exclude=True,
     )
     default_model: str = Field(default="", description="Default model to use")
+    secondary_llm_api_key: SecretStr | None = Field(
+        default=None,
+        description="API key for the secondary/auxiliary LLM (used by api_route.py as fallback)",
+    )
+    secondary_llm_base_url: str | None = Field(
+        default=None,
+        description="Base URL for the secondary/auxiliary LLM (used by api_route.py as fallback)",
+    )
     default_thinking: bool = Field(default=False, description="Default thinking mode")
     default_yolo: bool = Field(default=False, description="Default yolo (auto-approve) mode")
     skip_afk_prompt_injection: bool = Field(
@@ -267,8 +275,14 @@ class Config(BaseModel):
     )
     telemetry: bool = Field(
         default=True,
-        description="Enable anonymous telemetry to help improve kimi-cli. Set to false to disable.",
+        description=(
+            "Enable anonymous telemetry to help improve pc-kimi-cli. Set to false to disable."
+        ),
     )
+
+    @field_serializer("secondary_llm_api_key", when_used="json")
+    def dump_secondary_key(self, v: SecretStr | None) -> str | None:
+        return v.get_secret_value() if v else None
 
     @model_validator(mode="after")
     def validate_model(self) -> Self:

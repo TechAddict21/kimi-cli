@@ -65,7 +65,7 @@ class Session(BaseModel):
     """Web UI session metadata."""
 
     session_id: UUID = Field(..., description="Session unique ID")
-    title: str = Field(..., description="Session title derived from kimi-cli history")
+    title: str = Field(..., description="Session title derived from pc-kimi-cli history")
     last_updated: datetime = Field(..., description="Last updated timestamp")
     is_running: bool = Field(default=False, description="Whether the session is running")
     status: SessionStatus | None = Field(default=None, description="Session runtime status")

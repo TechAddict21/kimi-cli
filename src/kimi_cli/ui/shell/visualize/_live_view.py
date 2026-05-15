@@ -135,7 +135,7 @@ class _LiveView:
         self._cancel_event = cancel_event
         self._show_thinking_stream = show_thinking_stream
 
-        self._mooning_spinner = Spinner("moon", "")
+        self._mooning_spinner = Text("Processing...", style="dim")
         self._active_turn_depth = 0
         self._compacting_spinner: Spinner | None = None
         self._mcp_loading_spinner: Spinner | None = None
@@ -360,7 +360,7 @@ class _LiveView:
         Layout:
           - Modal (one of): MCP spinner | Compaction spinner | main group
           - Main group (additive): retry banner, content block, tool calls;
-            falls back to the mooning spinner when all three are empty
+            falls back to the processing indicator when all three are empty
             and a turn is active
           - btw spinner (prepended) and live notifications (appended) always show
 

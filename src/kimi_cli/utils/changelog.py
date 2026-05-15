@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import NamedTuple
 
@@ -103,6 +104,8 @@ def format_release_notes(changelog: dict[str, ReleaseEntry], include_lib_changes
     return "\n".join(parts).strip()
 
 
-CHANGELOG = parse_changelog(
-    (Path(__file__).parent.parent / "CHANGELOG.md").read_text(encoding="utf-8")
-)
+_changelog_path = Path(__file__).parent.parent / "CHANGELOG.md"
+_changelog_data: dict[str, ReleaseEntry] = {}
+with contextlib.suppress(FileNotFoundError):
+    _changelog_data = parse_changelog(_changelog_path.read_text(encoding="utf-8"))
+CHANGELOG: dict[str, ReleaseEntry] = _changelog_data

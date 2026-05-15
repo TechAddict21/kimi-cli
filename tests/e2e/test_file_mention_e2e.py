@@ -56,7 +56,7 @@ def _init_git_repo(work_dir: Path) -> None:
 
 
 def _setup_shell(tmp_path: Path, work_dir: Path):
-    """Start a kimi-cli shell in PTY with a scripted (no-op) model."""
+    """Start a pc-kimi-cli shell in PTY with a scripted (no-op) model."""
     home_dir = make_home_dir(tmp_path)
     config_path = write_scripted_config(tmp_path, scripts=["Hello!"])
     shell = start_shell_pty(

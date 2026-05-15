@@ -59,7 +59,7 @@ export interface ConfigModel {
      */
     capabilities?: Set<ModelCapability> | null;
     /**
-     * Model key in kimi-cli config (Config.models)
+     * Model key in pc-kimi-cli config (Config.models)
      * @type {string}
      * @memberof ConfigModel
      */

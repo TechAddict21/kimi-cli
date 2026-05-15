@@ -7,5 +7,7 @@
 - logging (Folder)
   - UTILITIES.md — write_file_log utility, usage across codebase, loguru logger reference
 
+- Reviewer (Folder)
+
 - run_restart_project (Folder)
   - HOW_TO_RUN.md — How to run, test, format, and build the project via uv

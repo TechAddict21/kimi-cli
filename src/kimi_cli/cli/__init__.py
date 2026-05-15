@@ -559,8 +559,6 @@ def kimi(
         """
         startup_progress = ShellStartupProgress(enabled=ui == "shell")
         try:
-            startup_progress.update("Preparing session...")
-
             # Track if we're resuming an existing session (vs creating new)
             resumed = False
 

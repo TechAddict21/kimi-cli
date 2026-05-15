@@ -24,14 +24,14 @@ PGPASSWORD=yourpass uv run main.py -h localhost -U postgres -d mydb
 ## Example
 
 ```
-kimi-psql✨ show all users who registered last month
+kimi-psql show all users who registered last month
 • Used ExecuteSql ({"sql": "SELECT * FROM users WHERE ..."})
 
   id | name  | created_at
   ---+-------+------------
   42 | Alice | 2024-11-15
 
-kimi-psql✨ ^X    # Switch to PSQL mode
+kimi-psql ^X    # Switch to PSQL mode
 postgres=# \d users
 ...
 ```

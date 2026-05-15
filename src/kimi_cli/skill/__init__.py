@@ -25,7 +25,7 @@ SkillType = Literal["standard", "flow"]
 SkillScope = Literal["builtin", "user", "project", "extra"]
 """Where a skill was discovered from.
 
-- ``builtin``: bundled with kimi-cli
+- ``builtin``: bundled with pc-kimi-cli
 - ``user``: from the user's home (``~/{share_dir}/skills``, ``~/.agents/skills``, ...)
 - ``project``: from the current project's working directory
   (``<work_dir>/{share_dir}/skills``, ``<work_dir>/.agents/skills``, ...)
@@ -154,7 +154,7 @@ async def find_project_skills_dirs(
     Return project-level skills directories from both brand and generic groups.
 
     Discovery starts at the **project root** (the nearest ``.git`` ancestor
-    of ``work_dir``), so launching kimi-cli from a subdirectory — for example
+    of ``work_dir``), so launching pc-kimi-cli from a subdirectory — for example
     a monorepo package — still surfaces skills defined at the repository root.
     Falls back to ``work_dir`` itself when no ``.git`` marker is found, to
     avoid accidentally walking up into unrelated parent trees.

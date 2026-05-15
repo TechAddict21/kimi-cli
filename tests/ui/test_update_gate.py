@@ -162,7 +162,7 @@ class TestRunUpdateGate:
         with pytest.raises(SystemExit) as exc_info:
             _run_update_gate("1.2.3", "1.5.0")
         assert exc_info.value.code == 0
-        mock_run.assert_called_once_with(["uv", "tool", "upgrade", "kimi-cli"])
+        mock_run.assert_called_once_with(["uv", "tool", "upgrade", "pc-kimi-cli"])
 
     def test_enter_lf_runs_upgrade_and_exits_zero(self, monkeypatch):
         from kimi_cli.ui.shell.update import _run_update_gate

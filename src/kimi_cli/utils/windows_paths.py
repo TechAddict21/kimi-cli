@@ -1,6 +1,6 @@
 """POSIX→Windows path conversion for user-supplied paths.
 
-On Windows, kimi-cli runs the Shell tool through Git for Windows' bash. The
+On Windows, pc-kimi-cli runs the Shell tool through Git for Windows' bash. The
 model may pass POSIX-form paths (``/c/Users/foo``) to the file tools, but
 Python's ``os``/``pathlib`` APIs need native form (``C:\\Users\\foo``). This
 helper does the conversion at the file-tool entry boundary

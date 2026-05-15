@@ -54,8 +54,8 @@ export interface UpdateGlobalConfigApiConfigPatchRequest {
 export class ConfigApi extends runtime.BaseAPI {
 
     /**
-     * Get kimi-cli config.toml.
-     * Get kimi-cli config.toml
+     * Get pc-kimi-cli config.toml.
+     * Get pc-kimi-cli config.toml
      */
     async getConfigTomlApiConfigTomlGetRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ConfigToml>> {
         const queryParameters: any = {};
@@ -76,8 +76,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Get kimi-cli config.toml.
-     * Get kimi-cli config.toml
+     * Get pc-kimi-cli config.toml.
+     * Get pc-kimi-cli config.toml
      */
     async getConfigTomlApiConfigTomlGet(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ConfigToml> {
         const response = await this.getConfigTomlApiConfigTomlGetRaw(initOverrides);
@@ -85,8 +85,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Get global (kimi-cli) config snapshot.
-     * Get global (kimi-cli) config snapshot
+     * Get global (pc-kimi-cli) config snapshot.
+     * Get global (pc-kimi-cli) config snapshot
      */
     async getGlobalConfigApiConfigGetRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<GlobalConfig>> {
         const queryParameters: any = {};
@@ -107,8 +107,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Get global (kimi-cli) config snapshot.
-     * Get global (kimi-cli) config snapshot
+     * Get global (pc-kimi-cli) config snapshot.
+     * Get global (pc-kimi-cli) config snapshot
      */
     async getGlobalConfigApiConfigGet(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<GlobalConfig> {
         const response = await this.getGlobalConfigApiConfigGetRaw(initOverrides);
@@ -116,8 +116,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Update kimi-cli config.toml.
-     * Update kimi-cli config.toml
+     * Update pc-kimi-cli config.toml.
+     * Update pc-kimi-cli config.toml
      */
     async updateConfigTomlApiConfigTomlPutRaw(requestParameters: UpdateConfigTomlApiConfigTomlPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<UpdateConfigTomlResponse>> {
         if (requestParameters['updateConfigTomlRequest'] == null) {
@@ -148,8 +148,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Update kimi-cli config.toml.
-     * Update kimi-cli config.toml
+     * Update pc-kimi-cli config.toml.
+     * Update pc-kimi-cli config.toml
      */
     async updateConfigTomlApiConfigTomlPut(requestParameters: UpdateConfigTomlApiConfigTomlPutRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<UpdateConfigTomlResponse> {
         const response = await this.updateConfigTomlApiConfigTomlPutRaw(requestParameters, initOverrides);
@@ -157,8 +157,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Update global (kimi-cli) default model/thinking.
-     * Update global (kimi-cli) default model/thinking
+     * Update global (pc-kimi-cli) default model/thinking.
+     * Update global (pc-kimi-cli) default model/thinking
      */
     async updateGlobalConfigApiConfigPatchRaw(requestParameters: UpdateGlobalConfigApiConfigPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<UpdateGlobalConfigResponse>> {
         if (requestParameters['updateGlobalConfigRequest'] == null) {
@@ -189,8 +189,8 @@ export class ConfigApi extends runtime.BaseAPI {
     }
 
     /**
-     * Update global (kimi-cli) default model/thinking.
-     * Update global (kimi-cli) default model/thinking
+     * Update global (pc-kimi-cli) default model/thinking.
+     * Update global (pc-kimi-cli) default model/thinking
      */
     async updateGlobalConfigApiConfigPatch(requestParameters: UpdateGlobalConfigApiConfigPatchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<UpdateGlobalConfigResponse> {
         const response = await this.updateGlobalConfigApiConfigPatchRaw(requestParameters, initOverrides);

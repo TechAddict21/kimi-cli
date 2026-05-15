@@ -191,9 +191,6 @@ class KimiCLI:
         _create_t0 = time.monotonic()
         _phase_timings_ms: dict[str, int] = {}
 
-        if startup_progress is not None:
-            startup_progress("Loading configuration...")
-
         _phase_t = time.monotonic()
         config = config if isinstance(config, Config) else load_config(config)
         _phase_timings_ms["config_ms"] = int((time.monotonic() - _phase_t) * 1000)
@@ -257,9 +254,6 @@ class KimiCLI:
             stream=stream,
         )
 
-        if startup_progress is not None:
-            startup_progress("Scanning workspace...")
-
         runtime = await Runtime.create(
             config,
             oauth,
@@ -293,8 +287,6 @@ class KimiCLI:
 
         if agent_file is None:
             agent_file = DEFAULT_AGENT_FILE
-        if startup_progress is not None:
-            startup_progress("Loading agent...")
 
         _phase_t = time.monotonic()
         agent = await load_agent(

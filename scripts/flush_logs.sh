@@ -4,6 +4,7 @@
 # This removes:
 #   - Application logs   (default: ~/.pc-kimi/logs/pc-kimi.log + rotated files)
 #   - Test logs          (default: ~/.pc-kimi/logs/test_logs.jsonl)
+#   - Review logs        (default: ~/.pc-kimi/logs/review/review_*.jsonl)
 #
 # Environment variables respected:
 #   KIMI_SHARE_DIR      - overrides the share directory (default: ~/.pc-kimi)
@@ -48,7 +49,17 @@ if [[ -f "$TEST_LOG_FILE" ]]; then
     done
 fi
 
-# 3. Legacy ~/.kimi/logs/kimi.log + rotated files (older installs)
+# 3. Review logs (per-invocation JSONL files under logs/review/)
+REVIEW_LOG_DIR="$SHARE_DIR/logs/review"
+if [[ -d "$REVIEW_LOG_DIR" ]]; then
+    for f in "$REVIEW_LOG_DIR"/review_*.jsonl; do
+        if [[ -f "$f" ]]; then
+            LOG_FILES+=("$f")
+        fi
+    done
+fi
+
+# 4. Legacy ~/.kimi/logs/kimi.log + rotated files (older installs)
 LEGACY_LOG_DIR="$HOME/.kimi/logs"
 if [[ -d "$LEGACY_LOG_DIR" ]]; then
     for f in "$LEGACY_LOG_DIR"/kimi.log "$LEGACY_LOG_DIR"/kimi.*.log; do
@@ -58,7 +69,7 @@ if [[ -d "$LEGACY_LOG_DIR" ]]; then
     done
 fi
 
-# 4. Legacy test logs at old default path (older installs)
+# 5. Legacy test logs at old default path (older installs)
 LEGACY_TEST_LOG="$HOME/.kimi/logs/test_logs.jsonl"
 if [[ -f "$LEGACY_TEST_LOG" ]]; then
     LOG_FILES+=("$LEGACY_TEST_LOG")

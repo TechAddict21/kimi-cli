@@ -1,5 +1,5 @@
 """
-Telemetry event tracking for kimi-cli.
+Telemetry event tracking for pc-kimi-cli.
 
 This module has NO dependencies on other kimi_cli modules to avoid import cycles.
 track() can be called at any point during startup, even before the sink is attached.

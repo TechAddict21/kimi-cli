@@ -480,7 +480,7 @@ async def test_rejected_refresh_token_cooldown_skips_background_retry(tmp_path, 
 
 @pytest.mark.asyncio
 async def test_rejected_tombstone_cleared_when_concurrent_instance_rotated(tmp_path, monkeypatch):
-    """If another kimi-cli instance legitimately rotates the refresh token
+    """If another pc-kimi-cli instance legitimately rotates the refresh token
     after we marked the old one rejected, the tombstone must clear and the
     new token must be picked up without going to the network.
     """
