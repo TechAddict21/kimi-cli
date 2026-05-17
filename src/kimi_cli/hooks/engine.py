@@ -230,6 +230,16 @@ class HookEngine:
                 continue
             wire_matched.append(s)
 
+        # --- Webhook: fire for every hook event except ignored ones ---
+        _WEBHOOK_SKIP: frozenset[str] = frozenset({"SubagentStart", "SubagentStop", "PreToolUse"})
+        if event not in _WEBHOOK_SKIP:
+            try:
+                from kimi_cli.webhook.service import fire as _wh_fire
+
+                _wh_fire(event, input_data)
+            except Exception:
+                pass
+
         total = len(server_matched) + len(wire_matched)
         if total == 0:
             return []

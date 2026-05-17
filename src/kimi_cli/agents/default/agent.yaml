@@ -34,3 +34,6 @@ agent:
     plan:
       path: ./plan.yaml
       description: "Read-only implementation planning and architecture design."
+    knowledge-completer:
+      path: ./knowledge-completer.yaml
+      description: "Analyzes sessions and updates the project knowledge base."

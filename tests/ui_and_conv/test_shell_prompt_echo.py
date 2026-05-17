@@ -44,7 +44,7 @@ def test_echo_agent_input_prints_stringified_user_message(monkeypatch) -> None:
 
     Shell._echo_agent_input(_make_user_input("hi"))
 
-    assert [getattr(t, "plain", t) for t in printed] == ["✨ hi"]
+    assert [getattr(t, "plain", t) for t in printed] == [" hi"]
 
 
 def test_echo_agent_input_uses_display_command_for_placeholders(monkeypatch) -> None:
@@ -60,13 +60,13 @@ def test_echo_agent_input_uses_display_command_for_placeholders(monkeypatch) -> 
 
     Shell._echo_agent_input(user_input)
 
-    assert [getattr(t, "plain", t) for t in printed] == ["✨ [Pasted text #1 +3 lines]"]
+    assert [getattr(t, "plain", t) for t in printed] == [" [Pasted text #1 +3 lines]"]
 
 
 def test_render_user_echo_preserves_literal_brackets() -> None:
     rendered = render_user_echo(Message(role="user", content=[TextPart(text="[brackets]")]))
 
-    assert rendered.plain == "✨ [brackets]"
+    assert rendered.plain == " [brackets]"
 
 
 def test_render_user_echo_preserves_image_placeholder_literal() -> None:
@@ -77,7 +77,7 @@ def test_render_user_echo_preserves_image_placeholder_literal() -> None:
         )
     )
 
-    assert rendered.plain == "✨ [image]"
+    assert rendered.plain == " [image]"
 
 
 def test_render_user_echo_preserves_audio_placeholder_literal() -> None:
@@ -92,7 +92,7 @@ def test_render_user_echo_preserves_audio_placeholder_literal() -> None:
         )
     )
 
-    assert rendered.plain == "✨ [audio:clip]"
+    assert rendered.plain == " [audio:clip]"
 
 
 def test_render_user_echo_preserves_video_placeholder_literal() -> None:
@@ -105,7 +105,7 @@ def test_render_user_echo_preserves_video_placeholder_literal() -> None:
         )
     )
 
-    assert rendered.plain == "✨ [video]"
+    assert rendered.plain == " [video]"
 
 
 def test_render_user_echo_preserves_mixed_content_order() -> None:
@@ -121,7 +121,7 @@ def test_render_user_echo_preserves_mixed_content_order() -> None:
         )
     )
 
-    assert rendered.plain == "✨ look [image][audio][video]"
+    assert rendered.plain == " look [image][audio][video]"
 
 
 def test_should_echo_agent_input_for_plain_agent_message() -> None:

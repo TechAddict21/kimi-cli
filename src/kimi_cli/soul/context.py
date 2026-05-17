@@ -33,7 +33,8 @@ class Context:
             logger.error("The context storage is already modified")
             raise RuntimeError("The context storage is already modified")
         if not self._file_backend.exists():
-            logger.debug("No context file found, skipping restoration")
+            logger.debug("No context file found, creating empty file")
+            self._file_backend.touch()
             return False
         if self._file_backend.stat().st_size == 0:
             logger.debug("Empty context file, skipping restoration")

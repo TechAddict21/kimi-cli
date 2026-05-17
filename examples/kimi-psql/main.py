@@ -299,7 +299,7 @@ async def create_psql_soul(llm: LLM | None, conninfo: str) -> KimiSoul:
 class PsqlShell:
     """Main TUI orchestrator for kimi-psql."""
 
-    PROMPT_SYMBOL_AI = "✨"
+    PROMPT_SYMBOL_AI = ""
     PROMPT_SYMBOL_PSQL = "$"
 
     def __init__(self, soul: KimiSoul, psql_process: PsqlProcess):

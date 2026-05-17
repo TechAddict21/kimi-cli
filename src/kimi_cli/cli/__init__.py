@@ -371,6 +371,30 @@ def kimi(
             ),
         ),
     ] = None,
+    webhook_url_endpoint: Annotated[
+        str | None,
+        typer.Option(
+            "--webhook-url-endpoint",
+            envvar="WEBHOOK_URL_ENDPOINT",
+            help=(
+                "Optional HTTP endpoint that receives POST requests for every CLI lifecycle "
+                "event (tool calls, turn begin/end, session start/stop, etc.). "
+                "Reads from WEBHOOK_URL_ENDPOINT env var if not passed directly."
+            ),
+        ),
+    ] = None,
+    webhook_session_id: Annotated[
+        str | None,
+        typer.Option(
+            "--webhook-session-id",
+            envvar="WEBHOOK_SESSION_ID",
+            help=(
+                "Optional correlation ID returned verbatim in every webhook payload as "
+                "`webhook_session_id`. Lets consumers tie events back to the invocation "
+                "that triggered them. Reads from WEBHOOK_SESSION_ID env var if not passed directly."
+            ),
+        ),
+    ] = None,
 ):
     """Kimi, your next CLI agent."""
     import asyncio
@@ -378,8 +402,12 @@ def kimi(
     import json
 
     from kimi_cli.utils.proctitle import init_process_name
+    from kimi_cli.webhook.service import initialize as _wh_init
 
     init_process_name("Kimi Code")
+
+    # Initialize webhook service early; fire() is a no-op when url is None.
+    _wh_init(webhook_url_endpoint, webhook_session_id)
 
     if ctx.invoked_subcommand is not None:
         return  # skip rest if a subcommand is invoked

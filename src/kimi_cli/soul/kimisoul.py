@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
@@ -59,6 +60,7 @@ from kimi_cli.soul.dynamic_injection import (
     normalize_history,
 )
 from kimi_cli.soul.dynamic_injections.afk_mode import AfkModeInjectionProvider
+from kimi_cli.soul.dynamic_injections.knowledge_feeder import KnowledgeFeederInjectionProvider
 from kimi_cli.soul.dynamic_injections.plan_mode import PlanModeInjectionProvider
 from kimi_cli.soul.message import check_message, system, system_reminder, tool_result_to_message
 from kimi_cli.soul.reviewer import Reviewer
@@ -68,6 +70,7 @@ from kimi_cli.tools.dmail import NAME as SendDMail_NAME
 from kimi_cli.tools.utils import ToolRejectedError
 from kimi_cli.utils.logging import logger
 from kimi_cli.utils.slashcmd import SlashCommand, parse_slash_command_call
+from kimi_cli.utils.test_logger import write_feeder_log
 from kimi_cli.wire.file import WireFile
 from kimi_cli.wire.types import (
     CompactionBegin,
@@ -189,6 +192,11 @@ class KimiSoul:
 
         self._steer_queue: asyncio.Queue[str | list[ContentPart]] = asyncio.Queue()
         self._last_tool_calls: list[tuple[str, str]] = []
+        self._had_tool_calls_in_turn: bool = False
+        self._feeder_injected_this_turn: bool = False
+        self._exploration_calls_this_turn: int = 0
+        self._turn_input_tokens: int = 0
+        self._turn_output_tokens: int = 0
         self._plan_mode: bool = self._runtime.session.state.plan_mode
         self._plan_session_id: str | None = self._runtime.session.state.plan_session_id
         self._current_turn_id: str = ""
@@ -202,6 +210,7 @@ class KimiSoul:
             self._ensure_plan_session_id()
         self._injection_providers: list[DynamicInjectionProvider] = [
             PlanModeInjectionProvider(),
+            KnowledgeFeederInjectionProvider(),
             *(
                 []
                 if self._runtime.config.skip_afk_prompt_injection
@@ -304,6 +313,8 @@ class KimiSoul:
                     type(provider).__name__,
                     exc_info=True,
                 )
+        if any(inj.type == "knowledge_feeder" for inj in injections):
+            self._feeder_injected_this_turn = True
         return injections
 
     async def _notify_injection_providers_compacted(self) -> None:
@@ -334,6 +345,125 @@ class KimiSoul:
                     type(provider).__name__,
                     exc_info=True,
                 )
+
+    async def _maybe_run_knowledge_completer(self) -> None:
+        """Launch knowledge-completer after turns with meaningful work."""
+
+        completer_updated: bool | None = None
+
+        if not self.is_root or not self._had_tool_calls_in_turn:
+            write_feeder_log(
+                "COMPLETER_SKIP",
+                f"root={self.is_root} had_tools={self._had_tool_calls_in_turn}",
+            )
+        else:
+            write_feeder_log(
+                "COMPLETER_START",
+                f"turn={self.turn_id} tool_calls={len(self._last_tool_calls)}",
+            )
+
+            work_dir = self._runtime.session.work_dir.unsafe_to_local_path()
+            kb_dir = work_dir / "knowledge_base_world"
+            if not kb_dir.exists():
+                write_feeder_log("COMPLETER_SKIP", "no knowledge_base_world")
+            else:
+                tree_path = kb_dir / "DRILL_DOWN_TREE.md"
+                tree_content = tree_path.read_text(encoding="utf-8") if tree_path.exists() else ""
+
+                history_lines: list[str] = []
+                for m in self._context.history[-40:]:
+                    text = m.extract_text(" ").strip() if m.content else ""
+                    if text:
+                        history_lines.append(f"[{m.role}] {text[:500]}")
+                history_snippet = "\n\n".join(history_lines)
+
+                prompt = (
+                    "Session conversation:\n" + history_snippet + "\n\n"
+                    "Current DRILL_DOWN_TREE.md:\n" + tree_content + "\n\n"
+                    "Analyze the session above. What new knowledge was gained? "
+                    "What was missed? Update DRILL_DOWN_TREE.md and create/update "
+                    "knowledge files in knowledge_base_world/."
+                )
+
+                # Record KB state before completer
+                kb_files_before: dict[str, float] = {}
+                if kb_dir.exists():
+                    for fp in kb_dir.rglob("*"):
+                        if fp.is_file():
+                            with contextlib.suppress(OSError):
+                                kb_files_before[str(fp.relative_to(kb_dir))] = fp.stat().st_mtime
+
+                try:
+                    from kimi_cli.subagents.runner import (  # noqa: I001
+                        ForegroundRunRequest,
+                        ForegroundSubagentRunner,
+                    )
+
+                    runner = ForegroundSubagentRunner(self._runtime)
+                    await runner.run(
+                        ForegroundRunRequest(
+                            description="knowledge completion",
+                            prompt=prompt,
+                            requested_type="knowledge-completer",
+                            model=None,
+                            resume=None,
+                        )
+                    )
+
+                    updated = False
+                    updated_files: list[str] = []
+                    reason = ""
+                    if kb_dir.exists():
+                        for fp in kb_dir.rglob("*"):
+                            if fp.is_file():
+                                try:
+                                    rel = str(fp.relative_to(kb_dir))
+                                    new_mtime = fp.stat().st_mtime
+                                    old_mtime = kb_files_before.get(rel)
+                                    if old_mtime is None:
+                                        updated_files.append(f"+{rel}")
+                                        updated = True
+                                    elif new_mtime > old_mtime:
+                                        updated_files.append(f"~{rel}")
+                                        updated = True
+                                except OSError:
+                                    pass
+                        reason = (
+                            f"{len(updated_files)} file(s) changed"
+                            if updated
+                            else (
+                                "No new knowledge to add"
+                                if len(kb_files_before) > 0
+                                else "Knowledge base is empty"
+                            )
+                        )
+
+                    completer_updated = updated
+                    write_feeder_log(
+                        "COMPLETER_UPDATED",
+                        str(updated).lower(),
+                        files=updated_files,
+                        reason=reason,
+                    )
+                    write_feeder_log("COMPLETER_DONE", f"turn={self.turn_id} updated={updated}")
+                except Exception as e:
+                    completer_updated = False
+                    write_feeder_log("COMPLETER_FAILED", str(e))
+
+        # FEEDER_HELPED — log after completer so we can factor in completer result
+        if self._feeder_injected_this_turn:
+            # Helped if: no exploration needed, OR completer filled the gap
+            no_exploration = self._exploration_calls_this_turn == 0
+            completer_filled_gap = completer_updated is True
+            feeder_helped = no_exploration or completer_filled_gap
+            write_feeder_log(
+                "FEEDER_HELPED",
+                str(feeder_helped).lower(),
+                exploration_calls=self._exploration_calls_this_turn,
+                no_exploration=no_exploration,
+                completer_filled_gap=completer_filled_gap,
+                completer_updated=completer_updated,
+            )
 
     def _bind_plan_mode_tools(self) -> None:
         """Bind plan mode state to tools that support it."""
@@ -515,6 +645,10 @@ class KimiSoul:
         return self._runtime
 
     @property
+    def turn_id(self) -> str:
+        return self._current_turn_id
+
+    @property
     def context(self) -> Context:
         return self._context
 
@@ -638,6 +772,23 @@ class KimiSoul:
 
             wire_send(TurnBegin(user_input=user_input))
             turn_started = True
+            self._turn_input_tokens = 0
+            self._turn_output_tokens = 0
+            try:
+                from kimi_cli.webhook.service import fire as _wh_fire
+
+                _wh_fire(
+                    "TurnBegin",
+                    {
+                        "hook_event_name": "TurnBegin",
+                        "session_id": self._runtime.session.id,
+                        "cwd": str(Path.cwd()),
+                        "user_input": user_input if isinstance(user_input, str) else "",
+                        "model": self._runtime.llm.model_name if self._runtime.llm else None,
+                    },
+                )
+            except Exception:
+                pass
             from kimi_cli.telemetry import track as _track_telemetry
 
             _track_telemetry("turn_started", mode="plan" if self._plan_mode else "agent")
@@ -661,6 +812,7 @@ class KimiSoul:
                 await runner.run(self, "")
             else:
                 await self._turn(user_message)
+                asyncio.create_task(self._maybe_run_knowledge_completer())
 
             # --- Stop hook (max 1 re-trigger to prevent infinite loop) ---
             if not self._stop_hook_active:
@@ -683,9 +835,45 @@ class KimiSoul:
 
             wire_send(TurnEnd())
             turn_finished = True
+            try:
+                from kimi_cli.webhook.service import fire as _wh_fire
+
+                _wh_fire(
+                    "TurnEnd",
+                    {
+                        "hook_event_name": "TurnEnd",
+                        "session_id": self._runtime.session.id,
+                        "cwd": str(Path.cwd()),
+                        "model": self._runtime.llm.model_name if self._runtime.llm else None,
+                        "turn_input_tokens": self._turn_input_tokens,
+                        "turn_output_tokens": self._turn_output_tokens,
+                        "turn_total_tokens": self._turn_input_tokens + self._turn_output_tokens,
+                        "context_tokens": self._context.token_count,
+                    },
+                )
+            except Exception:
+                pass
             from kimi_cli.utils.test_logger import write_file_log
 
             write_file_log("CLI_READY_FOR_INPUT", "Turn complete — ready for new input")
+            try:
+                from kimi_cli.webhook.service import fire as _wh_fire
+
+                _wh_fire(
+                    "CliReady",
+                    {
+                        "hook_event_name": "CliReady",
+                        "session_id": self._runtime.session.id,
+                        "cwd": str(Path.cwd()),
+                        "model": self._runtime.llm.model_name if self._runtime.llm else None,
+                        "turn_input_tokens": self._turn_input_tokens,
+                        "turn_output_tokens": self._turn_output_tokens,
+                        "turn_total_tokens": self._turn_input_tokens + self._turn_output_tokens,
+                        "context_tokens": self._context.token_count,
+                    },
+                )
+            except Exception:
+                pass
 
             # Auto-set title after first real turn (skip slash commands)
             if not command_call:
@@ -737,6 +925,9 @@ class KimiSoul:
 
         self._current_turn_id = uuid.uuid4().hex
         self._last_tool_calls = []
+        self._had_tool_calls_in_turn = False
+        self._feeder_injected_this_turn = False
+        self._exploration_calls_this_turn = 0
         self._reviewer_iterations = 0
 
         await self._checkpoint()  # this creates the checkpoint 0 on first run
@@ -1216,6 +1407,8 @@ class KimiSoul:
         if usage is not None:
             # mark the token count for the context before the step
             await self._context.update_token_count(usage.input)
+            self._turn_input_tokens += getattr(usage, "input", 0) or 0
+            self._turn_output_tokens += getattr(usage, "output", 0) or 0
             snap = self.status
             status_update.context_usage = snap.context_usage
             status_update.context_tokens = snap.context_tokens
@@ -1233,6 +1426,11 @@ class KimiSoul:
         # Update dedup tracking for the next step
         if isinstance(self._agent.toolset, KimiToolset):
             self._last_tool_calls = self._agent.toolset.end_step()
+            if self._last_tool_calls:
+                self._had_tool_calls_in_turn = True
+                for tool_name, _ in self._last_tool_calls:
+                    if tool_name in ("ReadFile", "Glob", "Grep"):
+                        self._exploration_calls_this_turn += 1
 
         # If a tool (EnterPlanMode/ExitPlanMode) changed plan mode during execution,
         # send a corrected StatusUpdate so the client sees the up-to-date state.

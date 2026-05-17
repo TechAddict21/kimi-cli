@@ -739,7 +739,7 @@ def test_shell_approval_reject_and_recover(tmp_path: Path) -> None:
         )
         shell.send_key("3")
         # Wait for the tool call to be fully processed (confirmed by "Used Shell" marker)
-        # before looking for the prompt, to avoid matching ✨ from a mid-turn redraw.
+        # before looking for the prompt, to avoid matching from a mid-turn redraw.
         shell.read_until_contains("Used Shell", after=reject_mark, timeout=15.0)
         reject_prompt_mark = shell.mark()
         _read_until_prompt(shell, after=reject_prompt_mark)

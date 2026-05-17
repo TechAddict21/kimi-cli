@@ -303,7 +303,7 @@ async def test_shell_run_echoes_unregistered_flow_slash_before_unknown_dispatch(
     assert result is True
     shell.run_soul_command.assert_not_awaited()
     shell._run_slash_command.assert_awaited_once()
-    assert printed == ["✨ /flow:not-found 执行一下", ""]
+    assert printed == [" /flow:not-found 执行一下", ""]
 
 
 @pytest.mark.asyncio

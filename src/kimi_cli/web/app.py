@@ -27,6 +27,7 @@ from kimi_cli.utils.server import (
     is_local_host,
 )
 from kimi_cli.web.api import (
+    analytics_router,
     config_router,
     open_in_router,
     sessions_router,
@@ -199,6 +200,7 @@ def create_app(
     # CORS middleware for local development
     application.add_middleware(cast(Any, CORSMiddleware), **cors_kwargs)
 
+    application.include_router(analytics_router)
     application.include_router(config_router)
     application.include_router(sessions_router)
     application.include_router(work_dirs_router)
