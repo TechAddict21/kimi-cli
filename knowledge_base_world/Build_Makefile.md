@@ -24,6 +24,12 @@ The project uses `make` for common development tasks. All targets are defined in
 - `make test-kimi-cli` — `pytest tests -vv` + `pytest tests_e2e -vv`.
 - `make ai-test` — Run the AI test suite via `tests_ai/scripts/run.py`.
 
+## Pre-commit hooks
+- `make install-prek` — Install the `prek` uv tool and register git hooks.
+- `make prepare` — Runs `install-prek` as part of dependency sync.
+- Root hook config (`.pre-commit-config.yaml`) runs `make format-kimi-cli` and `make check-kimi-cli`.
+- Per-package hook configs (`packages/kaos/.pre-commit-config.yaml`, `packages/kosong/.pre-commit-config.yaml`) use `orphan: true` and run `make -C ../.. format-<pkg>` / `check-<pkg>`.
+
 ## Builds
 - `make build` — Build all Python packages for release.
 - `make build-bin` — Build standalone PyInstaller executable (one-file).
