@@ -45,7 +45,12 @@ You have **read and write** access to the filesystem. Use:
 - `ReadFile` to read current knowledge base files
 - `Glob`/`Grep` to find related code
 - `WriteFile`/`StrReplaceFile` to update knowledge base files
-- `Shell` for listing directories or running git log
+
+You do **not** have shell access. The knowledge base is a closed loop:
+read code with `Glob`/`Grep`/`ReadFile`, write summaries with
+`WriteFile`/`StrReplaceFile`. Writes that contain credential-shaped
+strings (AWS keys, PEM blocks, JWTs, etc.) will be rejected — redact
+before persisting.
 
 ## Working Directory
 

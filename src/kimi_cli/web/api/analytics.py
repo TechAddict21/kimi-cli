@@ -232,10 +232,41 @@ _HTML_PAGE = """\
 <h1>📊 Feeder &amp; Completer Analytics</h1>
 <div id="root"></div>
 <script>
+// Auth: read token from URL once, strip it (so it never lands in browser
+// history, server logs, or referrer headers), persist via sessionStorage
+// for refreshes, then send as Authorization: Bearer on every fetch. The
+// server's AuthMiddleware only honors Bearer (and a GET query fallback);
+// query tokens leak via URL and are intentionally avoided here.
+// NOTE: this template is served raw (no Python .format() call). Object
+// literals must use single braces; blocks may use doubled braces — they
+// parse as nested blocks and are functionally equivalent.
+var STORAGE_KEY = 'kimi.sessionToken';
+var _token = '';
+(function () {
+  try {
+    var u = new URLSearchParams(window.location.search);
+    var t = u.get('token');
+    if (t) {
+      _token = t;
+      try { sessionStorage.setItem(STORAGE_KEY, t); } catch (_) {}
+      u.delete('token');
+      var remaining = u.toString();
+      var clean = window.location.pathname + (remaining ? '?' + remaining : '') + window.location.hash;
+      window.history.replaceState({}, document.title, clean);
+    } else {
+      try { _token = sessionStorage.getItem(STORAGE_KEY) || ''; } catch (_) { _token = ''; }
+    }
+  } catch (_) { _token = ''; }
+})();
+function authFetch(path) {
+  var opts = { headers: {} };
+  if (_token) opts.headers['Authorization'] = 'Bearer ' + _token;
+  return fetch(path, opts);
+}
 async function load() {{
   const [statsRes, timelineRes] = await Promise.all([
-    fetch('/api/analytics/feeder-stats'),
-    fetch('/api/analytics/timeline'),
+    authFetch('/api/analytics/feeder-stats'),
+    authFetch('/api/analytics/timeline'),
   ]);
   const stats = await statsRes.json();
   const tl = (await timelineRes.json()).events;

@@ -68,6 +68,7 @@ from kimi_cli.soul.slash import registry as soul_slash_registry
 from kimi_cli.soul.toolset import KimiToolset
 from kimi_cli.tools.dmail import NAME as SendDMail_NAME
 from kimi_cli.tools.utils import ToolRejectedError
+from kimi_cli.utils.kb_io import KB_DIR_NAME, kb_try_lock
 from kimi_cli.utils.logging import logger
 from kimi_cli.utils.slashcmd import SlashCommand, parse_slash_command_call
 from kimi_cli.utils.test_logger import write_feeder_log
@@ -363,7 +364,7 @@ class KimiSoul:
             )
 
             work_dir = self._runtime.session.work_dir.unsafe_to_local_path()
-            kb_dir = work_dir / "knowledge_base_world"
+            kb_dir = work_dir / KB_DIR_NAME
             if not kb_dir.exists():
                 write_feeder_log("COMPLETER_SKIP", "no knowledge_base_world")
             else:
@@ -399,53 +400,63 @@ class KimiSoul:
                         ForegroundSubagentRunner,
                     )
 
-                    runner = ForegroundSubagentRunner(self._runtime)
-                    await runner.run(
-                        ForegroundRunRequest(
-                            description="knowledge completion",
-                            prompt=prompt,
-                            requested_type="knowledge-completer",
-                            model=None,
-                            resume=None,
-                        )
-                    )
-
-                    updated = False
-                    updated_files: list[str] = []
-                    reason = ""
-                    if kb_dir.exists():
-                        for fp in kb_dir.rglob("*"):
-                            if fp.is_file():
-                                try:
-                                    rel = str(fp.relative_to(kb_dir))
-                                    new_mtime = fp.stat().st_mtime
-                                    old_mtime = kb_files_before.get(rel)
-                                    if old_mtime is None:
-                                        updated_files.append(f"+{rel}")
-                                        updated = True
-                                    elif new_mtime > old_mtime:
-                                        updated_files.append(f"~{rel}")
-                                        updated = True
-                                except OSError:
-                                    pass
-                        reason = (
-                            f"{len(updated_files)} file(s) changed"
-                            if updated
-                            else (
-                                "No new knowledge to add"
-                                if len(kb_files_before) > 0
-                                else "Knowledge base is empty"
+                    ran = False
+                    with kb_try_lock(kb_dir) as got_lock:
+                        if not got_lock:
+                            write_feeder_log(
+                                "COMPLETER_SKIP",
+                                "another completer holds the KB lock",
                             )
-                        )
+                        else:
+                            runner = ForegroundSubagentRunner(self._runtime)
+                            await runner.run(
+                                ForegroundRunRequest(
+                                    description="knowledge completion",
+                                    prompt=prompt,
+                                    requested_type="knowledge-completer",
+                                    model=None,
+                                    resume=None,
+                                )
+                            )
+                            ran = True
 
-                    completer_updated = updated
-                    write_feeder_log(
-                        "COMPLETER_UPDATED",
-                        str(updated).lower(),
-                        files=updated_files,
-                        reason=reason,
-                    )
-                    write_feeder_log("COMPLETER_DONE", f"turn={self.turn_id} updated={updated}")
+                    if ran:
+                        updated = False
+                        updated_files: list[str] = []
+                        reason = ""
+                        if kb_dir.exists():
+                            for fp in kb_dir.rglob("*"):
+                                if fp.is_file():
+                                    try:
+                                        rel = str(fp.relative_to(kb_dir))
+                                        new_mtime = fp.stat().st_mtime
+                                        old_mtime = kb_files_before.get(rel)
+                                        if old_mtime is None:
+                                            updated_files.append(f"+{rel}")
+                                            updated = True
+                                        elif new_mtime > old_mtime:
+                                            updated_files.append(f"~{rel}")
+                                            updated = True
+                                    except OSError:
+                                        pass
+                            reason = (
+                                f"{len(updated_files)} file(s) changed"
+                                if updated
+                                else (
+                                    "No new knowledge to add"
+                                    if len(kb_files_before) > 0
+                                    else "Knowledge base is empty"
+                                )
+                            )
+
+                        completer_updated = updated
+                        write_feeder_log(
+                            "COMPLETER_UPDATED",
+                            str(updated).lower(),
+                            files=updated_files,
+                            reason=reason,
+                        )
+                        write_feeder_log("COMPLETER_DONE", f"turn={self.turn_id} updated={updated}")
                 except Exception as e:
                     completer_updated = False
                     write_feeder_log("COMPLETER_FAILED", str(e))

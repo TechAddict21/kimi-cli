@@ -13,6 +13,7 @@ from kimi_cli.tools.file import FileActions
 from kimi_cli.tools.file.plan_mode import inspect_plan_edit_target
 from kimi_cli.tools.utils import load_desc
 from kimi_cli.utils.diff import build_diff_blocks
+from kimi_cli.utils.kb_io import is_kb_path, scan_for_secrets
 from kimi_cli.utils.logging import logger
 from kimi_cli.utils.path import is_within_workspace, kaos_path_from_user_input
 
@@ -128,6 +129,20 @@ class WriteFile(CallableTool2[Params]):
             new_text = (
                 params.content if params.mode == "overwrite" else (old_text or "") + params.content
             )
+
+            if is_kb_path(p.unsafe_to_local_path()):
+                secrets = scan_for_secrets(new_text)
+                if secrets:
+                    return ToolError(
+                        message=(
+                            f"Refusing to write `{params.path}`: content contains "
+                            f"secret-like patterns ({', '.join(secrets)}). "
+                            "The knowledge base must not store credentials. "
+                            "Redact the values and retry."
+                        ),
+                        brief="KB secret detected",
+                    )
+
             diff_blocks: list[DisplayBlock] = await build_diff_blocks(
                 str(p),
                 old_text or "",

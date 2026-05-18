@@ -1,0 +1,1 @@
+uv tool install --reinstall . > /dev/null 2>&1

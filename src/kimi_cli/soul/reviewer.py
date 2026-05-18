@@ -4,9 +4,16 @@ import asyncio
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from kosong import generate
+from kosong.chat_provider import (
+    APIConnectionError,
+    APIEmptyResponseError,
+    APIStatusError,
+    APITimeoutError,
+    ChatProviderError,
+)
 from kosong.message import Message, TextPart
 from kosong.utils.test_logger import write_file_log
 
@@ -74,44 +81,103 @@ class Reviewer:
                 ),
                 timeout=60.0,
             )
-            raw = result.message.extract_text(" ").strip()
-            logger.info("Reviewer raw response: {raw!r}", raw=raw)
-            self._log_func("REVIEWER_RAW_RESPONSE", raw)
-
-            # Strip markdown code fences if present
-            if raw.startswith("```"):
-                import re
-
-                raw = re.sub(r"^```(?:json)?\s*", "", raw)
-                raw = re.sub(r"\s*```$", "", raw)
-                raw = raw.strip()
-
-            parsed = json.loads(raw)
-            review_result = ReviewResult(
-                need_changes=bool(parsed.get("need_changes", False)),
-                feedback=str(parsed.get("feedback", "")),
-                refined_response=str(parsed.get("refined_response", "")),
-            )
-            logger.info(
-                "Reviewer decision: need_changes={need_changes} "
-                "has_feedback={has_feedback} has_refined={has_refined}",
-                need_changes=review_result.need_changes,
-                has_feedback=bool(review_result.feedback),
-                has_refined=bool(review_result.refined_response),
-            )
-            self._log_func(
-                "REVIEWER_RESULT",
-                json.dumps(
-                    {
-                        "need_changes": review_result.need_changes,
-                        "feedback": review_result.feedback,
-                        "refined_response": review_result.refined_response,
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-            return review_result
-        except Exception as exc:
-            logger.warning("Reviewer failed: {error}", error=exc)
-            self._log_func("REVIEWER_ERROR", str(exc))
+        except TimeoutError:
+            logger.warning("Reviewer timed out after 60s")
+            self._log_func("REVIEWER_ERROR", "timeout after 60s")
             return None
+        except APITimeoutError as exc:
+            logger.warning("Reviewer API timeout: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"api_timeout: {exc}")
+            return None
+        except APIConnectionError as exc:
+            logger.warning("Reviewer API connection error: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"api_connection: {exc}")
+            return None
+        except APIStatusError as exc:
+            logger.warning("Reviewer API status error: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"api_status: {exc}")
+            return None
+        except APIEmptyResponseError as exc:
+            logger.info("Reviewer got empty response: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"empty_response: {exc}")
+            return None
+        except ChatProviderError as exc:
+            logger.warning("Reviewer chat provider error: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"chat_provider: {exc}")
+            return None
+
+        raw = result.message.extract_text(" ").strip()
+        logger.info("Reviewer raw response: {raw!r}", raw=raw)
+        self._log_func("REVIEWER_RAW_RESPONSE", raw)
+
+        parsed = _extract_json_object(raw)
+        if parsed is None:
+            logger.warning("Reviewer response had no parseable JSON object")
+            self._log_func("REVIEWER_ERROR", "no_json_object_found")
+            return None
+        if not isinstance(parsed, dict):
+            kind = type(parsed).__name__
+            logger.warning("Reviewer JSON was not an object: type={type}", type=kind)
+            self._log_func("REVIEWER_ERROR", f"json_not_object: {kind}")
+            return None
+
+        parsed = cast(dict[str, object], parsed)
+
+        try:
+            need_changes_raw: object = parsed.get("need_changes", False)
+            feedback_raw: object = parsed.get("feedback", "")
+            refined_response_raw: object = parsed.get("refined_response", "")
+            review_result = ReviewResult(
+                need_changes=_coerce_bool(need_changes_raw),
+                feedback=str(feedback_raw),
+                refined_response=str(refined_response_raw),
+            )
+        except (TypeError, ValueError) as exc:
+            logger.warning("Reviewer result coercion failed: {error}", error=exc)
+            self._log_func("REVIEWER_ERROR", f"coercion: {exc}")
+            return None
+
+        logger.info(
+            "Reviewer decision: need_changes={need_changes} "
+            "has_feedback={has_feedback} has_refined={has_refined}",
+            need_changes=review_result.need_changes,
+            has_feedback=bool(review_result.feedback),
+            has_refined=bool(review_result.refined_response),
+        )
+        self._log_func(
+            "REVIEWER_RESULT",
+            json.dumps(
+                {
+                    "need_changes": review_result.need_changes,
+                    "feedback": review_result.feedback,
+                    "refined_response": review_result.refined_response,
+                },
+                ensure_ascii=False,
+            ),
+        )
+        return review_result
+
+
+def _extract_json_object(text: str) -> object | None:
+    """Extract the first JSON value from text, tolerating preamble/fences/trailing prose."""
+    decoder = json.JSONDecoder()
+    for idx, ch in enumerate(text):
+        if ch not in "{[":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(text, idx)
+        except json.JSONDecodeError:
+            continue
+        return obj
+    return None
+
+
+def _coerce_bool(value: object) -> bool:
+    """Coerce a JSON-decoded value to bool. Treats stringy 'false'/'0'/'' as False."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() not in {"", "false", "0", "no", "null", "none"}
+    return bool(value)

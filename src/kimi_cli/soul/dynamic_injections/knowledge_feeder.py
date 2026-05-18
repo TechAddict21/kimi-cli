@@ -11,15 +11,18 @@ from kosong.message import Message, TextPart
 
 from kimi_cli.notifications import is_notification_message
 from kimi_cli.soul.dynamic_injection import DynamicInjection, DynamicInjectionProvider
+from kimi_cli.utils.kb_io import KB_DIR_NAME, atomic_text_write, validate_safe_path
 from kimi_cli.utils.test_logger import write_feeder_log
 
 if TYPE_CHECKING:
     from kimi_cli.soul.kimisoul import KimiSoul
 
-KB_DIR_NAME = "knowledge_base_world"
 UNDERSTANDING_FILENAME = "UNDERSTANDING.md"
 DRILL_DOWN_FILENAME = "DRILL_DOWN_TREE.md"
 MAX_INJECTION_BYTES = 8192
+# Subagent types that should still receive feeder injections (read-only roles
+# where the same code lookups would otherwise be repeated wastefully).
+FEEDER_ALLOWED_SUBAGENT_TYPES = frozenset({"explore"})
 
 _DEFAULT_UNDERSTANDING = """\
 # Knowledge Base Understanding
@@ -39,6 +42,14 @@ Template:
 - <Area Name>
   - <DOC.md> \u2014 <description>
     \u2192 Read: <path/to/code/files>
+"""
+
+# Keep transient bookkeeping out of the user's git index. The knowledge base
+# itself is intended to be committed, but the lockfile + temp files are not.
+_DEFAULT_GITIGNORE = """\
+.kb.lock
+.kb.lock.d/
+*.kbtmp
 """
 
 _CLASSIFICATION_SYSTEM_PROMPT = """\
@@ -114,16 +125,54 @@ def _parse_tree_for_read_paths(tree_content: str) -> dict[str, list[str]]:
     return result
 
 
+_MAX_GLOB_EXPANSION = 5
+
+
 def _resolve_paths(work_dir: Path, raw_paths: list[str]) -> list[Path]:
-    """Resolve glob/file paths relative to work_dir."""
+    """Resolve glob/file paths relative to work_dir, sandboxed within it.
+
+    Paths that escape ``work_dir`` (absolute, parent traversal, symlinks
+    pointing outside) are rejected silently and a feeder log entry is
+    recorded so misconfigured tree entries surface in analytics.
+    """
+    try:
+        work_real = work_dir.resolve()
+    except OSError:
+        return []
+
     resolved: list[Path] = []
     for raw in raw_paths:
+        if not raw:
+            continue
+        if raw.startswith("/") or raw.startswith("~"):
+            write_feeder_log("FEEDER_PATH_REJECTED", raw, reason="absolute_or_home")
+            continue
         if "*" in raw:
-            resolved.extend(sorted(work_dir.glob(raw)))
+            try:
+                candidates = sorted(work_dir.glob(raw))
+            except OSError:
+                continue
+            kept = 0
+            for cand in candidates:
+                if kept >= _MAX_GLOB_EXPANSION:
+                    write_feeder_log("FEEDER_GLOB_CAPPED", raw, kept=kept)
+                    break
+                try:
+                    cand_real = cand.resolve()
+                    cand_real.relative_to(work_real)
+                except (OSError, ValueError):
+                    write_feeder_log("FEEDER_PATH_REJECTED", str(cand), reason="glob_escape")
+                    continue
+                if cand_real.exists():
+                    resolved.append(cand_real)
+                    kept += 1
         else:
-            full = (work_dir / raw).resolve()
-            if full.exists():
-                resolved.append(full)
+            safe = validate_safe_path(work_dir, raw)
+            if safe is None:
+                write_feeder_log("FEEDER_PATH_REJECTED", raw, reason="escape_workdir")
+                continue
+            if safe.exists():
+                resolved.append(safe)
     return resolved
 
 
@@ -208,15 +257,23 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
         if not kb_dir.exists():
             try:
                 kb_dir.mkdir(parents=True, exist_ok=True)
-                (kb_dir / UNDERSTANDING_FILENAME).write_text(
-                    _DEFAULT_UNDERSTANDING, encoding="utf-8"
-                )
-                (kb_dir / DRILL_DOWN_FILENAME).write_text(_DEFAULT_DRILL_DOWN, encoding="utf-8")
+                atomic_text_write(kb_dir / UNDERSTANDING_FILENAME, _DEFAULT_UNDERSTANDING)
+                atomic_text_write(kb_dir / DRILL_DOWN_FILENAME, _DEFAULT_DRILL_DOWN)
                 write_feeder_log("FEEDER_INIT", f"Created knowledge_base_world/ at {kb_dir}")
             except OSError as e:
                 write_feeder_log("FEEDER_INIT_FAILED", str(e), path=str(kb_dir))
                 self._knowledge_dir = kb_dir
                 return False
+
+        # Ensure .gitignore is present so transient lockfiles don't pollute
+        # user repos. Idempotent — only writes if the file is missing, so
+        # existing KBs upgrade smoothly without clobbering custom rules.
+        gi_path = kb_dir / ".gitignore"
+        if not gi_path.exists():
+            try:
+                atomic_text_write(gi_path, _DEFAULT_GITIGNORE)
+            except OSError as e:
+                write_feeder_log("FEEDER_GITIGNORE_FAILED", str(e), path=str(gi_path))
 
         self._knowledge_dir = kb_dir
         return True
@@ -314,8 +371,11 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
         self._last_turn_id = soul.turn_id
 
         if not soul.is_root:
-            write_feeder_log("FEEDER_SKIP_SUBAGENT", "")
-            return []
+            subagent_type = getattr(soul.runtime, "subagent_type", None)
+            if subagent_type not in FEEDER_ALLOWED_SUBAGENT_TYPES:
+                write_feeder_log("FEEDER_SKIP_SUBAGENT", str(subagent_type or ""))
+                return []
+            write_feeder_log("FEEDER_SUBAGENT_ALLOWED", str(subagent_type))
 
         work_dir = soul.runtime.session.work_dir.unsafe_to_local_path()
         write_feeder_log("FEEDER_WORK_DIR", str(work_dir))
