@@ -69,15 +69,17 @@ flowchart TD
     G --> H{tree loaded?}
     H -->|no| Z3[return []]
     H -->|yes| I[Extract last\nuser message text]
-    I --> J{cache hit?\nsame user_text}
-    J -->|yes| K[return cached\ninjection]
-    J -->|no| L[_classify_relevance]
-    L --> M[kosong.generate\nLLM classification]
-    M --> N{matched entries?}
-    N -->|yes| O[Read → Read: files]
-    N -->|no| Z4[return []]
-    O --> P[Build injection:\nIMPORTANT: files already read...]
-    P --> Q[return DynamicInjection]
+    I --> J{first user\nmessage only?}
+    J -->|no| Z5[return []]
+    J -->|yes| K{cache hit?\nsame user_text}
+    K -->|yes| L[return cached\ninjection]
+    K -->|no| M[_classify_relevance]
+    M --> N[kosong.generate\nLLM classification]
+    N --> O{matched entries?}
+    O -->|yes| P[Read → Read: files]
+    O -->|no| Z4[return []]
+    P --> Q[Build injection:\nIMPORTANT: files already read...]
+    Q --> R[return DynamicInjection]
 ```
 
 ### Key Methods
@@ -85,6 +87,7 @@ flowchart TD
 #### `get_injections(history, soul)`
 - **Guard 1**: Skip if same turn (only inject on 1st step of a turn)
 - **Guard 2**: Skip if subagent (`is_root == False`)
+- **Guard 3**: Skip if not the user's first message (counts non-notification user messages in history; injects on 1st user message only)
 - **Init**: Lazily creates `knowledge_base_world/` if missing
 - **Load tree**: Parses `DRILL_DOWN_TREE.md` into `{path: [read_paths]}`
 - **Extract user text**: Finds last user message that isn't a notification
@@ -165,19 +168,26 @@ flowchart TD
     C -->|no| D[COMPLETER_SKIP\nfeeder_helped still logged]
     C -->|yes| E{knowledge_base_world\nexists?}
     E -->|no| D
-    E -->|yes| F[Record KB mtimes\nBEFORE snapshot]
-    F --> G[Build prompt:\nhistory + tree_content]
-    G --> H[ForegroundSubagentRunner\nknowledge-completer subagent]
-    H --> I[Subagent reads DRILL_DOWN_TREE.md]
-    I --> J[Subagent analyzes session]
-    J --> K[Subagent updates KB files]
-    K --> L[Record KB mtimes\nAFTER snapshot]
-    L --> M{Files changed?}
-    M -->|yes| N[COMPLETER_UPDATED true\nlist changed files]
-    M -->|no| O[COMPLETER_UPDATED false\nreason: no changes]
-    N --> P[COMPLETER_DONE]
-    O --> P
-    P --> Q[FEEDER_HELPED logged\nwith completer result]
+    E -->|yes| F[Compute delta:\nnew messages since\nlast completer run]
+    F --> G{delta > 0?}
+    G -->|no| D2[COMPLETER_SKIP\nno new messages]
+    G -->|yes| H[Record KB mtimes\nBEFORE snapshot]
+    H --> I{first run or\ncompaction?}
+    I -->|yes| J[Build FULL prompt:\nlast 40 messages + tree]
+    I -->|no| K[Build INCREMENTAL prompt:\nonly delta messages + tree]
+    J --> L[ForegroundSubagentRunner\nknowledge-completer subagent]
+    K --> L
+    L --> M[Subagent reads DRILL_DOWN_TREE.md]
+    M --> N[Subagent analyzes session]
+    N --> O[Subagent updates KB files]
+    O --> P[Record KB mtimes\nAFTER snapshot]
+    P --> Q{Files changed?}
+    Q -->|yes| R[COMPLETER_UPDATED true\nlist changed files]
+    Q -->|no| S[COMPLETER_UPDATED false\nreason: no changes]
+    R --> T[Update history bookmark\n_last_completer_history_len]
+    S --> T
+    T --> U[COMPLETER_DONE]
+    U --> V[FEEDER_HELPED logged\nwith completer result]
 ```
 
 ### Agent Spec (`knowledge-completer.yaml`)
@@ -223,23 +233,44 @@ async def _maybe_run_knowledge_completer(self) -> None:
         if not kb_dir.exists():
             write_feeder_log("COMPLETER_SKIP", "no knowledge_base_world")
         else:
-            # Record KB state BEFORE
-            kb_files_before = snapshot_mtimes(kb_dir)
-            
-            # Launch subagent
-            runner = ForegroundSubagentRunner(self._runtime)
-            await runner.run(ForegroundRunRequest(
-                description="knowledge completion",
-                prompt=prompt_with_history_and_tree,
-                requested_type="knowledge-completer",
-                model=None, resume=None,
-            ))
-            
-            # Check KB state AFTER
-            updated, files, reason = check_file_changes(kb_dir, kb_files_before)
-            completer_updated = updated
-            write_feeder_log("COMPLETER_UPDATED", str(updated), files=files, reason=reason)
-            write_feeder_log("COMPLETER_DONE", f"updated={updated}")
+            # Incremental analysis: only send messages since last completer run
+            history_len = len(self._context.history)
+            last_len = self._last_completer_history_len
+            if last_len > 0 and last_len < history_len:
+                delta_messages = self._context.history[last_len:]
+                is_incremental = True
+            else:
+                delta_messages = self._context.history[-40:]
+                is_incremental = False
+
+            if not delta_messages:
+                write_feeder_log("COMPLETER_SKIP", "no new messages since last run")
+            else:
+                write_feeder_log(
+                    "COMPLETER_INCREMENTAL" if is_incremental else "COMPLETER_FULL",
+                    f"messages={len(delta_messages)}",
+                )
+
+                # Record KB state BEFORE
+                kb_files_before = snapshot_mtimes(kb_dir)
+                
+                # Launch subagent
+                runner = ForegroundSubagentRunner(self._runtime)
+                await runner.run(ForegroundRunRequest(
+                    description="knowledge completion",
+                    prompt=incremental_prompt if is_incremental else full_prompt,
+                    requested_type="knowledge-completer",
+                    model=None, resume=None,
+                ))
+                
+                # Bookmark history so next run is incremental
+                self._last_completer_history_len = len(self._context.history)
+                
+                # Check KB state AFTER
+                updated, files, reason = check_file_changes(kb_dir, kb_files_before)
+                completer_updated = updated
+                write_feeder_log("COMPLETER_UPDATED", str(updated), files=files, reason=reason)
+                write_feeder_log("COMPLETER_DONE", f"updated={updated}")
 
     # FEEDER_HELPED — logged AFTER completer for accurate scoring
     if self._feeder_injected_this_turn:
@@ -249,7 +280,9 @@ async def _maybe_run_knowledge_completer(self) -> None:
         write_feeder_log("FEEDER_HELPED", str(feeder_helped), ...)
 ```
 
-### Completer Prompt
+### Completer Prompts
+
+**Full prompt** (first run or after context compaction):
 
 ```markdown
 Session conversation:
@@ -263,6 +296,24 @@ Current DRILL_DOWN_TREE.md:
 Analyze the session above. What new knowledge was gained?
 What was missed? Update DRILL_DOWN_TREE.md and create/update
 knowledge files in knowledge_base_world/.
+```
+
+**Incremental prompt** (subsequent runs, only new messages):
+
+```markdown
+New conversation since the last knowledge update:
+[{new user message}]
+[{new assistant response with tools}]
+...
+
+Current DRILL_DOWN_TREE.md:
+{current tree content}
+
+Analyze ONLY the new conversation above.
+What additional knowledge was gained in this turn?
+Update DRILL_DOWN_TREE.md and create/update
+knowledge files in knowledge_base_world/ as needed.
+Do NOT duplicate existing entries.
 ```
 
 ---
@@ -341,10 +392,13 @@ Writes to: `~/.pc-kimi/logs/feeder/feeder_logs.jsonl`
 | `FEEDER_HELPED` | Scored after completer | `exploration_calls`, `no_exploration`, `completer_filled_gap`, `completer_updated` |
 | `FEEDER_SKIP_SUBAGENT` | Skipped: not root | — |
 | `FEEDER_SKIP_SAME_TURN` | Skipped: already processed this turn | — |
+| `FEEDER_SKIP_NOT_FIRST_MSG` | Skipped: not the first user message | `user_msg_count` |
 | `FEEDER_NO_USER_TEXT` | No user message in history | — |
 | `FEEDER_CACHE_RESET` | Cache cleared on compaction | — |
 | `COMPLETER_SKIP` | Skipped: no tools or no KB | `root`, `had_tools` |
 | `COMPLETER_START` | Completer about to launch | `tool_calls` |
+| `COMPLETER_FULL` | Full analysis (first run / post-compaction) | `messages`, `history_len`, `last_len` |
+| `COMPLETER_INCREMENTAL` | Incremental analysis (only new messages) | `messages`, `history_len`, `last_len` |
 | `COMPLETER_DONE` | Completer finished | `updated` |
 | `COMPLETER_FAILED` | Completer threw exception | — |
 | `COMPLETER_UPDATED` | KB file change check | `files`, `reason` |
@@ -375,8 +429,9 @@ These flags are set during the turn and used for scoring:
 | `_had_tool_calls_in_turn` | `bool` | `_step()` after `end_step()` | True if any tool call was made |
 | `_exploration_calls_this_turn` | `int` | `_step()` after `end_step()` | Count of ReadFile/Glob/Grep calls |
 | `_last_tool_calls` | `list[tuple]` | `_step()` after `end_step()` | Tool calls from the last step only (not aggregated) |
+| `_last_completer_history_len` | `int` | `KimiSoul.__init__` | History length at last successful completer run; reset on compaction |
 
-All flags reset at the start of `_turn()`.
+All turn-scoped flags reset at the start of `_turn()`. `_last_completer_history_len` persists across turns and is reset to `0` on context compaction.
 
 ---
 

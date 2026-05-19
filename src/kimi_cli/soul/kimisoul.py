@@ -196,6 +196,7 @@ class KimiSoul:
         self._had_tool_calls_in_turn: bool = False
         self._feeder_injected_this_turn: bool = False
         self._exploration_calls_this_turn: int = 0
+        self._last_completer_history_len: int = 0
         self._turn_input_tokens: int = 0
         self._turn_output_tokens: int = 0
         self._plan_mode: bool = self._runtime.session.state.plan_mode
@@ -325,6 +326,7 @@ class KimiSoul:
         cannot abort compaction (which would skip CompactionEnd wire events
         and PostCompact telemetry).
         """
+        self._last_completer_history_len = 0
         for provider in self._injection_providers:
             try:
                 await provider.on_context_compacted()
@@ -371,95 +373,142 @@ class KimiSoul:
                 tree_path = kb_dir / "DRILL_DOWN_TREE.md"
                 tree_content = tree_path.read_text(encoding="utf-8") if tree_path.exists() else ""
 
-                history_lines: list[str] = []
-                for m in self._context.history[-40:]:
-                    text = m.extract_text(" ").strip() if m.content else ""
-                    if text:
-                        history_lines.append(f"[{m.role}] {text[:500]}")
-                history_snippet = "\n\n".join(history_lines)
+                # Incremental history: only send new messages since last completer run.
+                # Reset to 0 on context compaction so the next run does a fresh analysis.
+                history_len = len(self._context.history)
+                last_len = self._last_completer_history_len
+                if last_len > 0 and last_len < history_len:
+                    delta_messages = self._context.history[last_len:]
+                    is_incremental = True
+                else:
+                    delta_messages = self._context.history[-40:]
+                    is_incremental = False
 
-                prompt = (
-                    "Session conversation:\n" + history_snippet + "\n\n"
-                    "Current DRILL_DOWN_TREE.md:\n" + tree_content + "\n\n"
-                    "Analyze the session above. What new knowledge was gained? "
-                    "What was missed? Update DRILL_DOWN_TREE.md and create/update "
-                    "knowledge files in knowledge_base_world/."
-                )
+                # Safety cap at 40 messages even for incremental
+                if len(delta_messages) > 40:
+                    delta_messages = delta_messages[-40:]
 
-                # Record KB state before completer
-                kb_files_before: dict[str, float] = {}
-                if kb_dir.exists():
-                    for fp in kb_dir.rglob("*"):
-                        if fp.is_file():
-                            with contextlib.suppress(OSError):
-                                kb_files_before[str(fp.relative_to(kb_dir))] = fp.stat().st_mtime
-
-                try:
-                    from kimi_cli.subagents.runner import (  # noqa: I001
-                        ForegroundRunRequest,
-                        ForegroundSubagentRunner,
+                if not delta_messages:
+                    write_feeder_log("COMPLETER_SKIP", "no new messages since last run")
+                    completer_updated = None
+                else:
+                    write_feeder_log(
+                        "COMPLETER_INCREMENTAL" if is_incremental else "COMPLETER_FULL",
+                        f"messages={len(delta_messages)} "
+                        f"history_len={history_len} last_len={last_len}",
                     )
 
-                    ran = False
-                    with kb_try_lock(kb_dir) as got_lock:
-                        if not got_lock:
-                            write_feeder_log(
-                                "COMPLETER_SKIP",
-                                "another completer holds the KB lock",
-                            )
-                        else:
-                            runner = ForegroundSubagentRunner(self._runtime)
-                            await runner.run(
-                                ForegroundRunRequest(
-                                    description="knowledge completion",
-                                    prompt=prompt,
-                                    requested_type="knowledge-completer",
-                                    model=None,
-                                    resume=None,
-                                )
-                            )
-                            ran = True
+                    history_lines: list[str] = []
+                    for m in delta_messages:
+                        text = m.extract_text(" ").strip() if m.content else ""
+                        if text:
+                            history_lines.append(f"[{m.role}] {text[:500]}")
+                    history_snippet = "\n\n".join(history_lines)
 
-                    if ran:
-                        updated = False
-                        updated_files: list[str] = []
-                        reason = ""
-                        if kb_dir.exists():
-                            for fp in kb_dir.rglob("*"):
-                                if fp.is_file():
-                                    try:
-                                        rel = str(fp.relative_to(kb_dir))
-                                        new_mtime = fp.stat().st_mtime
-                                        old_mtime = kb_files_before.get(rel)
-                                        if old_mtime is None:
-                                            updated_files.append(f"+{rel}")
-                                            updated = True
-                                        elif new_mtime > old_mtime:
-                                            updated_files.append(f"~{rel}")
-                                            updated = True
-                                    except OSError:
-                                        pass
-                            reason = (
-                                f"{len(updated_files)} file(s) changed"
-                                if updated
-                                else (
-                                    "No new knowledge to add"
-                                    if len(kb_files_before) > 0
-                                    else "Knowledge base is empty"
-                                )
-                            )
-
-                        completer_updated = updated
-                        write_feeder_log(
-                            "COMPLETER_UPDATED",
-                            str(updated).lower(),
-                            files=updated_files,
-                            reason=reason,
+                    if is_incremental:
+                        prompt = (
+                            "New conversation since the last knowledge update:\n"
+                            + history_snippet
+                            + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
+                            + tree_content
+                            + "\n\nAnalyze ONLY the new conversation above. "
+                            "What additional knowledge was gained in this turn? "
+                            "Update DRILL_DOWN_TREE.md and create/update "
+                            "knowledge files in knowledge_base_world/ as needed. "
+                            "Do NOT duplicate existing entries."
                         )
-                        write_feeder_log("COMPLETER_DONE", f"turn={self.turn_id} updated={updated}")
-                except Exception as e:
-                    completer_updated = False
-                    write_feeder_log("COMPLETER_FAILED", str(e))
+                    else:
+                        prompt = (
+                            "Session conversation:\n"
+                            + history_snippet
+                            + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
+                            + tree_content
+                            + "\n\nAnalyze the session above. What new knowledge was gained? "
+                            "What was missed? Update DRILL_DOWN_TREE.md and create/update "
+                            "knowledge files in knowledge_base_world/."
+                        )
+
+                    # Record KB state before completer
+                    kb_files_before: dict[str, float] = {}
+                    if kb_dir.exists():
+                        for fp in kb_dir.rglob("*"):
+                            if fp.is_file():
+                                with contextlib.suppress(OSError):
+                                    rel = str(fp.relative_to(kb_dir))
+                                    kb_files_before[rel] = fp.stat().st_mtime
+
+                    try:
+                        from kimi_cli.subagents.runner import (  # noqa: I001
+                            ForegroundRunRequest,
+                            ForegroundSubagentRunner,
+                        )
+
+                        ran = False
+                        with kb_try_lock(kb_dir) as got_lock:
+                            if not got_lock:
+                                write_feeder_log(
+                                    "COMPLETER_SKIP",
+                                    "another completer holds the KB lock",
+                                )
+                            else:
+                                runner = ForegroundSubagentRunner(self._runtime)
+                                await runner.run(
+                                    ForegroundRunRequest(
+                                        description="knowledge completion",
+                                        prompt=prompt,
+                                        requested_type="knowledge-completer",
+                                        model=None,
+                                        resume=None,
+                                    )
+                                )
+                                ran = True
+
+                        if ran:
+                            # Update bookmark so next run only sends new messages
+                            self._last_completer_history_len = len(self._context.history)
+
+                            updated = False
+                            updated_files: list[str] = []
+                            reason = ""
+                            if kb_dir.exists():
+                                for fp in kb_dir.rglob("*"):
+                                    if fp.is_file():
+                                        try:
+                                            rel = str(fp.relative_to(kb_dir))
+                                            new_mtime = fp.stat().st_mtime
+                                            old_mtime = kb_files_before.get(rel)
+                                            if old_mtime is None:
+                                                updated_files.append(f"+{rel}")
+                                                updated = True
+                                            elif new_mtime > old_mtime:
+                                                updated_files.append(f"~{rel}")
+                                                updated = True
+                                        except OSError:
+                                            pass
+                                reason = (
+                                    f"{len(updated_files)} file(s) changed"
+                                    if updated
+                                    else (
+                                        "No new knowledge to add"
+                                        if len(kb_files_before) > 0
+                                        else "Knowledge base is empty"
+                                    )
+                                )
+
+                            completer_updated = updated
+                            write_feeder_log(
+                                "COMPLETER_UPDATED",
+                                str(updated).lower(),
+                                files=updated_files,
+                                reason=reason,
+                            )
+                            write_feeder_log(
+                                "COMPLETER_DONE",
+                                f"turn={self.turn_id} updated={updated}",
+                            )
+                    except Exception as e:
+                        completer_updated = False
+                        write_feeder_log("COMPLETER_FAILED", str(e))
 
         # FEEDER_HELPED — log after completer so we can factor in completer result
         if self._feeder_injected_this_turn:

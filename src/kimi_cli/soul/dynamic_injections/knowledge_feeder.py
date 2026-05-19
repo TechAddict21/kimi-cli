@@ -388,6 +388,13 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
             write_feeder_log("FEEDER_NO_TREE", "No tree loaded, skipping")
             return []
 
+        user_msg_count = sum(
+            1 for msg in history if msg.role == "user" and not is_notification_message(msg)
+        )
+        if user_msg_count > 1:
+            write_feeder_log("FEEDER_SKIP_NOT_FIRST_MSG", f"user_msg_count={user_msg_count}")
+            return []
+
         user_text = ""
         for msg in reversed(history):
             if msg.role == "user" and not is_notification_message(msg):
