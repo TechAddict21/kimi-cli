@@ -71,7 +71,7 @@ from kimi_cli.tools.utils import ToolRejectedError
 from kimi_cli.utils.kb_io import KB_DIR_NAME, kb_try_lock
 from kimi_cli.utils.logging import logger
 from kimi_cli.utils.slashcmd import SlashCommand, parse_slash_command_call
-from kimi_cli.utils.test_logger import write_feeder_log
+from kimi_cli.utils.test_logger import write_feeder_log, write_trace_time_entry
 from kimi_cli.wire.file import WireFile
 from kimi_cli.wire.types import (
     CompactionBegin,
@@ -319,6 +319,23 @@ class KimiSoul:
             self._feeder_injected_this_turn = True
         return injections
 
+    def write_trace_time(
+        self,
+        title: str,
+        start_time: float,
+        end_time: float,
+        context_length: int,
+    ) -> None:
+        """Write a trace_time entry for the current session."""
+        write_trace_time_entry(
+            self._runtime.session.dir,
+            title=title,
+            start_time=start_time,
+            end_time=end_time,
+            context_length=context_length,
+            turn_id=self._current_turn_id or None,
+        )
+
     async def _notify_injection_providers_compacted(self) -> None:
         """Notify all injection providers that the context has been compacted.
 
@@ -352,177 +369,189 @@ class KimiSoul:
     async def _maybe_run_knowledge_completer(self) -> None:
         """Launch knowledge-completer after turns with meaningful work."""
 
+        completer_start_time = time.time()
+        completer_context_length = self._context.token_count
         completer_updated: bool | None = None
 
-        if not self.is_root or not self._had_tool_calls_in_turn:
-            write_feeder_log(
-                "COMPLETER_SKIP",
-                f"root={self.is_root} had_tools={self._had_tool_calls_in_turn}",
-            )
-        else:
-            write_feeder_log(
-                "COMPLETER_START",
-                f"turn={self.turn_id} tool_calls={len(self._last_tool_calls)}",
-            )
-
-            work_dir = self._runtime.session.work_dir.unsafe_to_local_path()
-            kb_dir = work_dir / KB_DIR_NAME
-            if not kb_dir.exists():
-                write_feeder_log("COMPLETER_SKIP", "no knowledge_base_world")
+        try:
+            if not self.is_root or not self._had_tool_calls_in_turn:
+                write_feeder_log(
+                    "COMPLETER_SKIP",
+                    f"root={self.is_root} had_tools={self._had_tool_calls_in_turn}",
+                )
             else:
-                tree_path = kb_dir / "DRILL_DOWN_TREE.md"
-                tree_content = tree_path.read_text(encoding="utf-8") if tree_path.exists() else ""
+                write_feeder_log(
+                    "COMPLETER_START",
+                    f"turn={self.turn_id} tool_calls={len(self._last_tool_calls)}",
+                )
 
-                # Incremental history: only send new messages since last completer run.
-                # Reset to 0 on context compaction so the next run does a fresh analysis.
-                history_len = len(self._context.history)
-                last_len = self._last_completer_history_len
-                if last_len > 0 and last_len < history_len:
-                    delta_messages = self._context.history[last_len:]
-                    is_incremental = True
+                work_dir = self._runtime.session.work_dir.unsafe_to_local_path()
+                kb_dir = work_dir / KB_DIR_NAME
+                if not kb_dir.exists():
+                    write_feeder_log("COMPLETER_SKIP", "no knowledge_base_world")
                 else:
-                    delta_messages = self._context.history[-40:]
-                    is_incremental = False
-
-                # Safety cap at 40 messages even for incremental
-                if len(delta_messages) > 40:
-                    delta_messages = delta_messages[-40:]
-
-                if not delta_messages:
-                    write_feeder_log("COMPLETER_SKIP", "no new messages since last run")
-                    completer_updated = None
-                else:
-                    write_feeder_log(
-                        "COMPLETER_INCREMENTAL" if is_incremental else "COMPLETER_FULL",
-                        f"messages={len(delta_messages)} "
-                        f"history_len={history_len} last_len={last_len}",
+                    tree_path = kb_dir / "DRILL_DOWN_TREE.md"
+                    tree_content = (
+                        tree_path.read_text(encoding="utf-8") if tree_path.exists() else ""
                     )
 
-                    history_lines: list[str] = []
-                    for m in delta_messages:
-                        text = m.extract_text(" ").strip() if m.content else ""
-                        if text:
-                            history_lines.append(f"[{m.role}] {text[:500]}")
-                    history_snippet = "\n\n".join(history_lines)
-
-                    if is_incremental:
-                        prompt = (
-                            "New conversation since the last knowledge update:\n"
-                            + history_snippet
-                            + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
-                            + tree_content
-                            + "\n\nAnalyze ONLY the new conversation above. "
-                            "What additional knowledge was gained in this turn? "
-                            "Update DRILL_DOWN_TREE.md and create/update "
-                            "knowledge files in knowledge_base_world/ as needed. "
-                            "Do NOT duplicate existing entries."
-                        )
+                    # Incremental history: only send new messages since last completer run.
+                    # Reset to 0 on context compaction so the next run does a fresh analysis.
+                    history_len = len(self._context.history)
+                    last_len = self._last_completer_history_len
+                    if last_len > 0 and last_len < history_len:
+                        delta_messages = self._context.history[last_len:]
+                        is_incremental = True
                     else:
-                        prompt = (
-                            "Session conversation:\n"
-                            + history_snippet
-                            + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
-                            + tree_content
-                            + "\n\nAnalyze the session above. What new knowledge was gained? "
-                            "What was missed? Update DRILL_DOWN_TREE.md and create/update "
-                            "knowledge files in knowledge_base_world/."
+                        delta_messages = self._context.history[-40:]
+                        is_incremental = False
+
+                    # Safety cap at 40 messages even for incremental
+                    if len(delta_messages) > 40:
+                        delta_messages = delta_messages[-40:]
+
+                    if not delta_messages:
+                        write_feeder_log("COMPLETER_SKIP", "no new messages since last run")
+                        completer_updated = None
+                    else:
+                        write_feeder_log(
+                            "COMPLETER_INCREMENTAL" if is_incremental else "COMPLETER_FULL",
+                            f"messages={len(delta_messages)} "
+                            f"history_len={history_len} last_len={last_len}",
                         )
 
-                    # Record KB state before completer
-                    kb_files_before: dict[str, float] = {}
-                    if kb_dir.exists():
-                        for fp in kb_dir.rglob("*"):
-                            if fp.is_file():
-                                with contextlib.suppress(OSError):
-                                    rel = str(fp.relative_to(kb_dir))
-                                    kb_files_before[rel] = fp.stat().st_mtime
+                        history_lines: list[str] = []
+                        for m in delta_messages:
+                            text = m.extract_text(" ").strip() if m.content else ""
+                            if text:
+                                history_lines.append(f"[{m.role}] {text[:500]}")
+                        history_snippet = "\n\n".join(history_lines)
 
-                    try:
-                        from kimi_cli.subagents.runner import (  # noqa: I001
-                            ForegroundRunRequest,
-                            ForegroundSubagentRunner,
-                        )
+                        if is_incremental:
+                            prompt = (
+                                "New conversation since the last knowledge update:\n"
+                                + history_snippet
+                                + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
+                                + tree_content
+                                + "\n\nAnalyze ONLY the new conversation above. "
+                                "What additional knowledge was gained in this turn? "
+                                "Update DRILL_DOWN_TREE.md and create/update "
+                                "knowledge files in knowledge_base_world/ as needed. "
+                                "Do NOT duplicate existing entries."
+                            )
+                        else:
+                            prompt = (
+                                "Session conversation:\n"
+                                + history_snippet
+                                + "\n\nCurrent DRILL_DOWN_TREE.md:\n"
+                                + tree_content
+                                + "\n\nAnalyze the session above. What new knowledge was gained? "
+                                "What was missed? Update DRILL_DOWN_TREE.md and create/update "
+                                "knowledge files in knowledge_base_world/."
+                            )
 
-                        ran = False
-                        with kb_try_lock(kb_dir) as got_lock:
-                            if not got_lock:
+                        # Record KB state before completer
+                        kb_files_before: dict[str, float] = {}
+                        if kb_dir.exists():
+                            for fp in kb_dir.rglob("*"):
+                                if fp.is_file():
+                                    with contextlib.suppress(OSError):
+                                        rel = str(fp.relative_to(kb_dir))
+                                        kb_files_before[rel] = fp.stat().st_mtime
+
+                        try:
+                            from kimi_cli.subagents.runner import (  # noqa: I001
+                                ForegroundRunRequest,
+                                ForegroundSubagentRunner,
+                            )
+
+                            ran = False
+                            with kb_try_lock(kb_dir) as got_lock:
+                                if not got_lock:
+                                    write_feeder_log(
+                                        "COMPLETER_SKIP",
+                                        "another completer holds the KB lock",
+                                    )
+                                else:
+                                    runner = ForegroundSubagentRunner(self._runtime)
+                                    await runner.run(
+                                        ForegroundRunRequest(
+                                            description="knowledge completion",
+                                            prompt=prompt,
+                                            requested_type="knowledge-completer",
+                                            model=None,
+                                            resume=None,
+                                        )
+                                    )
+                                    ran = True
+
+                            if ran:
+                                # Update bookmark so next run only sends new messages
+                                self._last_completer_history_len = len(self._context.history)
+
+                                updated = False
+                                updated_files: list[str] = []
+                                reason = ""
+                                if kb_dir.exists():
+                                    for fp in kb_dir.rglob("*"):
+                                        if fp.is_file():
+                                            try:
+                                                rel = str(fp.relative_to(kb_dir))
+                                                new_mtime = fp.stat().st_mtime
+                                                old_mtime = kb_files_before.get(rel)
+                                                if old_mtime is None:
+                                                    updated_files.append(f"+{rel}")
+                                                    updated = True
+                                                elif new_mtime > old_mtime:
+                                                    updated_files.append(f"~{rel}")
+                                                    updated = True
+                                            except OSError:
+                                                pass
+                                    reason = (
+                                        f"{len(updated_files)} file(s) changed"
+                                        if updated
+                                        else (
+                                            "No new knowledge to add"
+                                            if len(kb_files_before) > 0
+                                            else "Knowledge base is empty"
+                                        )
+                                    )
+
+                                completer_updated = updated
                                 write_feeder_log(
-                                    "COMPLETER_SKIP",
-                                    "another completer holds the KB lock",
+                                    "COMPLETER_UPDATED",
+                                    str(updated).lower(),
+                                    files=updated_files,
+                                    reason=reason,
                                 )
-                            else:
-                                runner = ForegroundSubagentRunner(self._runtime)
-                                await runner.run(
-                                    ForegroundRunRequest(
-                                        description="knowledge completion",
-                                        prompt=prompt,
-                                        requested_type="knowledge-completer",
-                                        model=None,
-                                        resume=None,
-                                    )
+                                write_feeder_log(
+                                    "COMPLETER_DONE",
+                                    f"turn={self.turn_id} updated={updated}",
                                 )
-                                ran = True
+                        except Exception as e:
+                            completer_updated = False
+                            write_feeder_log("COMPLETER_FAILED", str(e))
 
-                        if ran:
-                            # Update bookmark so next run only sends new messages
-                            self._last_completer_history_len = len(self._context.history)
-
-                            updated = False
-                            updated_files: list[str] = []
-                            reason = ""
-                            if kb_dir.exists():
-                                for fp in kb_dir.rglob("*"):
-                                    if fp.is_file():
-                                        try:
-                                            rel = str(fp.relative_to(kb_dir))
-                                            new_mtime = fp.stat().st_mtime
-                                            old_mtime = kb_files_before.get(rel)
-                                            if old_mtime is None:
-                                                updated_files.append(f"+{rel}")
-                                                updated = True
-                                            elif new_mtime > old_mtime:
-                                                updated_files.append(f"~{rel}")
-                                                updated = True
-                                        except OSError:
-                                            pass
-                                reason = (
-                                    f"{len(updated_files)} file(s) changed"
-                                    if updated
-                                    else (
-                                        "No new knowledge to add"
-                                        if len(kb_files_before) > 0
-                                        else "Knowledge base is empty"
-                                    )
-                                )
-
-                            completer_updated = updated
-                            write_feeder_log(
-                                "COMPLETER_UPDATED",
-                                str(updated).lower(),
-                                files=updated_files,
-                                reason=reason,
-                            )
-                            write_feeder_log(
-                                "COMPLETER_DONE",
-                                f"turn={self.turn_id} updated={updated}",
-                            )
-                    except Exception as e:
-                        completer_updated = False
-                        write_feeder_log("COMPLETER_FAILED", str(e))
-
-        # FEEDER_HELPED — log after completer so we can factor in completer result
-        if self._feeder_injected_this_turn:
-            # Helped if: no exploration needed, OR completer filled the gap
-            no_exploration = self._exploration_calls_this_turn == 0
-            completer_filled_gap = completer_updated is True
-            feeder_helped = no_exploration or completer_filled_gap
-            write_feeder_log(
-                "FEEDER_HELPED",
-                str(feeder_helped).lower(),
-                exploration_calls=self._exploration_calls_this_turn,
-                no_exploration=no_exploration,
-                completer_filled_gap=completer_filled_gap,
-                completer_updated=completer_updated,
+            # FEEDER_HELPED — log after completer so we can factor in completer result
+            if self._feeder_injected_this_turn:
+                # Helped if: no exploration needed, OR completer filled the gap
+                no_exploration = self._exploration_calls_this_turn == 0
+                completer_filled_gap = completer_updated is True
+                feeder_helped = no_exploration or completer_filled_gap
+                write_feeder_log(
+                    "FEEDER_HELPED",
+                    str(feeder_helped).lower(),
+                    exploration_calls=self._exploration_calls_this_turn,
+                    no_exploration=no_exploration,
+                    completer_filled_gap=completer_filled_gap,
+                    completer_updated=completer_updated,
+                )
+        finally:
+            self.write_trace_time(
+                "completer",
+                completer_start_time,
+                time.time(),
+                completer_context_length,
             )
 
     def _bind_plan_mode_tools(self) -> None:
@@ -1095,237 +1124,258 @@ class KimiSoul:
         """
         assert self._runtime.llm is not None
 
-        # ═══════════════════════════════════════════════════════════════════════
-        # 1. TURN INITIALIZATION
-        # ═══════════════════════════════════════════════════════════════════════
+        turn_start_time = time.time()
+        turn_context_length = self._context.token_count
+        try:
+            # ═══════════════════════════════════════════════════════════════════════
+            # 1. TURN INITIALIZATION
+            # ═══════════════════════════════════════════════════════════════════════
 
-        # Discard any stale steers from a previous turn.
-        while not self._steer_queue.empty():
-            self._steer_queue.get_nowait()
+            # Discard any stale steers from a previous turn.
+            while not self._steer_queue.empty():
+                self._steer_queue.get_nowait()
 
-        # ── 1a. MCP deferred loading ──────────────────────────────────────────
-        if isinstance(self._agent.toolset, KimiToolset):
-            await self.start_background_mcp_loading()
-            loading = bool((snapshot := self._mcp_status_snapshot()) and snapshot.loading)
-            if loading:
-                wire_send(StatusUpdate(mcp_status=snapshot))
-                wire_send(MCPLoadingBegin())
-            try:
-                await self.wait_for_background_mcp_loading()
-                # Track MCP connection result
+            # ── 1a. MCP deferred loading ──────────────────────────────────────────
+            if isinstance(self._agent.toolset, KimiToolset):
+                await self.start_background_mcp_loading()
+                loading = bool((snapshot := self._mcp_status_snapshot()) and snapshot.loading)
                 if loading:
-                    from kimi_cli.telemetry import track as _track_mcp
+                    wire_send(StatusUpdate(mcp_status=snapshot))
+                    wire_send(MCPLoadingBegin())
+                try:
+                    await self.wait_for_background_mcp_loading()
+                    # Track MCP connection result
+                    if loading:
+                        from kimi_cli.telemetry import track as _track_mcp
 
-                    mcp_snap = self._mcp_status_snapshot()
-                    if mcp_snap:
-                        if mcp_snap.connected > 0:
-                            _track_mcp(
-                                "mcp_connected",
-                                server_count=mcp_snap.connected,
-                                total_count=mcp_snap.total,
-                            )
-                        _failed = mcp_snap.total - mcp_snap.connected
-                        if _failed > 0:
-                            _track_mcp(
-                                "mcp_failed",
-                                failed_count=_failed,
-                                total_count=mcp_snap.total,
-                            )
-            finally:
-                if loading:
-                    wire_send(StatusUpdate(mcp_status=self._mcp_status_snapshot()))
-                    wire_send(MCPLoadingEnd())
-
-        # ═══════════════════════════════════════════════════════════════════════
-        # 2. STEP LOOP
-        # ═══════════════════════════════════════════════════════════════════════
-        step_no = 0
-        self._current_step_no = 0
-        while True:
-            step_no += 1
-
-            # ── 2a. Step Guard ──────────────────────────────────────────────────
-            if step_no > self._loop_control.max_steps_per_turn:
-                raise MaxStepsReached(self._loop_control.max_steps_per_turn)
-
-            self._current_step_no = step_no
-
-            # ── 2b. Step Begin ──────────────────────────────────────────────────
-            wire_send(StepBegin(n=step_no))
-            back_to_the_future: BackToTheFuture | None = None
-            step_outcome: StepOutcome | None = None
-
-            try:
-                # ── 2c. Context Compaction ──────────────────────────────────────
-                if should_auto_compact(
-                    self._context.token_count_with_pending,
-                    self._runtime.llm.max_context_size,
-                    trigger_ratio=self._loop_control.compaction_trigger_ratio,
-                    reserved_context_size=self._loop_control.reserved_context_size,
-                ):
-                    logger.info("Context too long, compacting...")
-                    try:
-                        await self.compact_context()
-                    except Exception as compact_err:
-                        logger.error(
-                            "Context compaction failed at step {step_no}: {error_type}: {error}",
-                            step_no=step_no,
-                            error_type=type(compact_err).__name__,
-                            error=compact_err,
-                        )
-                        raise
-
-                # ── 2d. Checkpoint ──────────────────────────────────────────────
-                logger.debug("Beginning step {step_no}", step_no=step_no)
-                await self._checkpoint()
-                self._denwa_renji.set_n_checkpoints(self._context.n_checkpoints)
-
-                # ── 2e. Step Execution ──────────────────────────────────────────
-                step_outcome = await self._step()
-
-            except BackToTheFuture as e:
-                # ── 2f-i. D-Mail revert signal ────────────────────────────────
-                back_to_the_future = e
-
-            except Exception as e:
-                # ── 2f-ii. Fatal step error ───────────────────────────────────
-                req_id = getattr(e, "request_id", None)
-                logger.error(
-                    "Agent step {step_no} failed: {error_type}: {error}"
-                    + (" (request_id={request_id})" if req_id else ""),
-                    step_no=step_no,
-                    error_type=type(e).__name__,
-                    error=e,
-                    request_id=req_id,
-                )
-                wire_send(StepInterrupted())
-
-                # Track API/step errors
-                from kimi_cli.telemetry import track
-
-                error_type, status_code = classify_api_error(e)
-                track_kwargs: dict[str, Any] = {"error_type": error_type}
-                if status_code is not None:
-                    track_kwargs["status_code"] = status_code
-                # Enrich with context attached by _step() (model, duration, input_tokens)
-                _kimi_ctx = getattr(e, "_kimi_api_error_context", None)
-                if _kimi_ctx is not None:
-                    for key in ("model", "duration_ms", "input_tokens"):
-                        if key in _kimi_ctx:
-                            track_kwargs[key] = _kimi_ctx[key]
-                track("api_error", **track_kwargs)
-
-                # --- StopFailure hook ---
-                from kimi_cli.hooks import events as _hook_events
-
-                _hook_task = asyncio.create_task(
-                    self._hook_engine.trigger(
-                        "StopFailure",
-                        matcher_value=type(e).__name__,
-                        input_data=_hook_events.stop_failure(
-                            session_id=self._runtime.session.id,
-                            cwd=str(Path.cwd()),
-                            error_type=type(e).__name__,
-                            error_message=str(e),
-                        ),
-                    )
-                )
-                _hook_task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
-                # break the agent loop
-                raise
-
-            # ── 2g. Outcome Resolution ──────────────────────────────────────────
-            if step_outcome is not None:
-                # Step returned a stop reason -- check for steers before finishing.
-                has_steers = await self._consume_pending_steers()
-                if has_steers:
-                    continue  # steers injected, force another LLM step
-
-                # ═══════════════════════════════════════════════════════════════
-                # 3. TURN RESOLUTION
-                # ═══════════════════════════════════════════════════════════════
-                final_message = (
-                    step_outcome.assistant_message
-                    if step_outcome.stop_reason == "no_tool_calls"
-                    else None
-                )
-
-                # ── Reviewer: check final response before presenting to user ──
-                if (
-                    final_message is not None
-                    and self._reviewer_enabled
-                    and self._reviewer is not None
-                    and self._reviewer_iterations < self._runtime.config.reviewer_max_iterations
-                ):
-                    logger.info(
-                        "Reviewer checking turn (iteration {iteration}/{max})",
-                        iteration=self._reviewer_iterations + 1,
-                        max=self._runtime.config.reviewer_max_iterations,
-                    )
-                    review_result = await self._reviewer.review(self._context, final_message)
-                    self._reviewer_iterations += 1
-                    if review_result is not None:
-                        if review_result.need_changes:
-                            logger.info(
-                                "Reviewer requested changes: {feedback!r}",
-                                feedback=review_result.feedback,
-                            )
-                            feedback_text = (
-                                review_result.feedback
-                                or "Please revise your previous response to address any issues."
-                            )
-                            await self._context.append_message(
-                                Message(
-                                    role="user",
-                                    content=[TextPart(text=feedback_text)],
+                        mcp_snap = self._mcp_status_snapshot()
+                        if mcp_snap:
+                            if mcp_snap.connected > 0:
+                                _track_mcp(
+                                    "mcp_connected",
+                                    server_count=mcp_snap.connected,
+                                    total_count=mcp_snap.total,
                                 )
+                            _failed = mcp_snap.total - mcp_snap.connected
+                            if _failed > 0:
+                                _track_mcp(
+                                    "mcp_failed",
+                                    failed_count=_failed,
+                                    total_count=mcp_snap.total,
+                                )
+                finally:
+                    if loading:
+                        wire_send(StatusUpdate(mcp_status=self._mcp_status_snapshot()))
+                        wire_send(MCPLoadingEnd())
+
+            # ═══════════════════════════════════════════════════════════════════════
+            # 2. STEP LOOP
+            # ═══════════════════════════════════════════════════════════════════════
+            step_no = 0
+            self._current_step_no = 0
+            while True:
+                step_no += 1
+
+                # ── 2a. Step Guard ──────────────────────────────────────────────────
+                if step_no > self._loop_control.max_steps_per_turn:
+                    raise MaxStepsReached(self._loop_control.max_steps_per_turn)
+
+                self._current_step_no = step_no
+
+                # ── 2b. Step Begin ──────────────────────────────────────────────────
+                wire_send(StepBegin(n=step_no))
+                back_to_the_future: BackToTheFuture | None = None
+                step_outcome: StepOutcome | None = None
+
+                try:
+                    # ── 2c. Context Compaction ──────────────────────────────────────
+                    if should_auto_compact(
+                        self._context.token_count_with_pending,
+                        self._runtime.llm.max_context_size,
+                        trigger_ratio=self._loop_control.compaction_trigger_ratio,
+                        reserved_context_size=self._loop_control.reserved_context_size,
+                    ):
+                        logger.info("Context too long, compacting...")
+                        try:
+                            await self.compact_context()
+                        except Exception as compact_err:
+                            logger.error(
+                                "Context compaction failed at step {step_no}: "
+                                "{error_type}: {error}",
+                                step_no=step_no,
+                                error_type=type(compact_err).__name__,
+                                error=compact_err,
                             )
-                            continue  # agent will revise
-                        if review_result.refined_response:
-                            logger.info(
-                                "Reviewer provided refined response ({len} chars)",
-                                len=len(review_result.refined_response),
-                            )
-                            final_message = Message(
-                                role="assistant",
-                                content=[TextPart(text=review_result.refined_response)],
-                            )
-                    else:
-                        logger.info("Reviewer returned None (skipped/failed)")
-                elif self._reviewer_enabled and final_message is not None:
-                    logger.info(
-                        "Reviewer max iterations reached ({max}), sending as-is",
-                        max=self._runtime.config.reviewer_max_iterations,
+                            raise
+
+                    # ── 2d. Checkpoint ──────────────────────────────────────────────
+                    logger.debug("Beginning step {step_no}", step_no=step_no)
+                    await self._checkpoint()
+                    self._denwa_renji.set_n_checkpoints(self._context.n_checkpoints)
+
+                    # ── 2e. Step Execution ──────────────────────────────────────────
+                    step_outcome = await self._step()
+
+                except BackToTheFuture as e:
+                    # ── 2f-i. D-Mail revert signal ────────────────────────────────
+                    back_to_the_future = e
+
+                except Exception as e:
+                    # ── 2f-ii. Fatal step error ───────────────────────────────────
+                    req_id = getattr(e, "request_id", None)
+                    logger.error(
+                        "Agent step {step_no} failed: {error_type}: {error}"
+                        + (" (request_id={request_id})" if req_id else ""),
+                        step_no=step_no,
+                        error_type=type(e).__name__,
+                        error=e,
+                        request_id=req_id,
+                    )
+                    wire_send(StepInterrupted())
+
+                    # Track API/step errors
+                    from kimi_cli.telemetry import track
+
+                    error_type, status_code = classify_api_error(e)
+                    track_kwargs: dict[str, Any] = {"error_type": error_type}
+                    if status_code is not None:
+                        track_kwargs["status_code"] = status_code
+                    # Enrich with context attached by _step() (model, duration, input_tokens)
+                    _kimi_ctx = getattr(e, "_kimi_api_error_context", None)
+                    if _kimi_ctx is not None:
+                        for key in ("model", "duration_ms", "input_tokens"):
+                            if key in _kimi_ctx:
+                                track_kwargs[key] = _kimi_ctx[key]
+                    track("api_error", **track_kwargs)
+
+                    # --- StopFailure hook ---
+                    from kimi_cli.hooks import events as _hook_events
+
+                    _hook_task = asyncio.create_task(
+                        self._hook_engine.trigger(
+                            "StopFailure",
+                            matcher_value=type(e).__name__,
+                            input_data=_hook_events.stop_failure(
+                                session_id=self._runtime.session.id,
+                                cwd=str(Path.cwd()),
+                                error_type=type(e).__name__,
+                                error_message=str(e),
+                            ),
+                        )
+                    )
+                    _hook_task.add_done_callback(
+                        lambda t: t.exception() if not t.cancelled() else None
+                    )
+                    # break the agent loop
+                    raise
+
+                # ── 2g. Outcome Resolution ──────────────────────────────────────────
+                if step_outcome is not None:
+                    # Step returned a stop reason -- check for steers before finishing.
+                    has_steers = await self._consume_pending_steers()
+                    if has_steers:
+                        continue  # steers injected, force another LLM step
+
+                    # ═══════════════════════════════════════════════════════════════
+                    # 3. TURN RESOLUTION
+                    # ═══════════════════════════════════════════════════════════════
+                    final_message = (
+                        step_outcome.assistant_message
+                        if step_outcome.stop_reason == "no_tool_calls"
+                        else None
                     )
 
-                # When reviewer is enabled, send the complete final message now
-                # (streaming was disabled during kosong.step)
-                if self._reviewer_enabled and final_message is not None:
-                    logger.info(
-                        "Sending final message ({n} parts, {chars} chars)",
-                        n=len(final_message.content),
-                        chars=len(final_message.extract_text(" ")),
+                    # ── Reviewer: check final response before presenting to user ──
+                    if (
+                        final_message is not None
+                        and self._reviewer_enabled
+                        and self._reviewer is not None
+                        and self._reviewer_iterations < self._runtime.config.reviewer_max_iterations
+                    ):
+                        logger.info(
+                            "Reviewer checking turn (iteration {iteration}/{max})",
+                            iteration=self._reviewer_iterations + 1,
+                            max=self._runtime.config.reviewer_max_iterations,
+                        )
+                        reviewer_start_time = time.time()
+                        review_result = await self._reviewer.review(self._context, final_message)
+                        reviewer_end_time = time.time()
+                        self.write_trace_time(
+                            "peer_review",
+                            reviewer_start_time,
+                            reviewer_end_time,
+                            self._context.token_count,
+                        )
+                        self._reviewer_iterations += 1
+                        if review_result is not None:
+                            if review_result.need_changes:
+                                logger.info(
+                                    "Reviewer requested changes: {feedback!r}",
+                                    feedback=review_result.feedback,
+                                )
+                                feedback_text = (
+                                    review_result.feedback
+                                    or "Please revise your previous response to address any issues."
+                                )
+                                await self._context.append_message(
+                                    Message(
+                                        role="user",
+                                        content=[TextPart(text=feedback_text)],
+                                    )
+                                )
+                                continue  # agent will revise
+                            if review_result.refined_response:
+                                logger.info(
+                                    "Reviewer provided refined response ({len} chars)",
+                                    len=len(review_result.refined_response),
+                                )
+                                final_message = Message(
+                                    role="assistant",
+                                    content=[TextPart(text=review_result.refined_response)],
+                                )
+                        else:
+                            logger.info("Reviewer returned None (skipped/failed)")
+                    elif self._reviewer_enabled and final_message is not None:
+                        logger.info(
+                            "Reviewer max iterations reached ({max}), sending as-is",
+                            max=self._runtime.config.reviewer_max_iterations,
+                        )
+
+                    # When reviewer is enabled, send the complete final message now
+                    # (streaming was disabled during kosong.step)
+                    if self._reviewer_enabled and final_message is not None:
+                        logger.info(
+                            "Sending final message ({n} parts, {chars} chars)",
+                            n=len(final_message.content),
+                            chars=len(final_message.extract_text(" ")),
+                        )
+                        for part in final_message.content:
+                            wire_send(part)
+                    elif self._reviewer_enabled:
+                        logger.info("Final message is None, nothing to send")
+
+                    return TurnOutcome(
+                        stop_reason=step_outcome.stop_reason,
+                        final_message=final_message,
+                        step_count=step_no,
                     )
-                    for part in final_message.content:
-                        wire_send(part)
-                elif self._reviewer_enabled:
-                    logger.info("Final message is None, nothing to send")
 
-                return TurnOutcome(
-                    stop_reason=step_outcome.stop_reason,
-                    final_message=final_message,
-                    step_count=step_no,
-                )
+                if back_to_the_future is not None:
+                    # Revert context to the checkpoint and inject D-Mail message.
+                    await self._context.revert_to(back_to_the_future.checkpoint_id)
+                    self._last_tool_calls = []
+                    await self._checkpoint()
+                    await self._context.append_message(back_to_the_future.messages)
 
-            if back_to_the_future is not None:
-                # Revert context to the checkpoint and inject D-Mail message.
-                await self._context.revert_to(back_to_the_future.checkpoint_id)
-                self._last_tool_calls = []
-                await self._checkpoint()
-                await self._context.append_message(back_to_the_future.messages)
-
-            # Consume any pending steers between steps before next iteration.
-            await self._consume_pending_steers()
+                # Consume any pending steers between steps before next iteration.
+                await self._consume_pending_steers()
+        finally:
+            self.write_trace_time(
+                "turn",
+                turn_start_time,
+                time.time(),
+                turn_context_length,
+            )
 
     async def _step(self) -> StepOutcome | None:
         """Run a single step and return a stop outcome, or None to continue.
@@ -1443,19 +1493,26 @@ class KimiSoul:
                 chat_provider=chat_provider,
             )
 
-        t0 = time.monotonic()
+        t0 = time.time()
         try:
             result = await _kosong_step_with_retry()
         except Exception as _step_exc:
+            t1 = time.time()
+            self.write_trace_time("step_llm", t0, t1, self._context.token_count)
             # Attach known context so the outer loop can enrich api_error telemetry
             _ctx: dict[str, Any] = {
                 "model": self._runtime.llm.model_name,
-                "duration_ms": int((time.monotonic() - t0) * 1000),
+                "duration_ms": int((t1 - t0) * 1000),
             }
             if self._context.token_count > 0:
                 _ctx["input_tokens"] = self._context.token_count
             _step_exc._kimi_api_error_context = _ctx  # type: ignore[attr-defined]
             raise
+        t1 = time.time()
+        step_context_length = (
+            result.usage.input if (result.usage is not None) else self._context.token_count
+        )
+        self.write_trace_time("step_llm", t0, t1, step_context_length)
 
         # ═══════════════════════════════════════════════════════════════════════
         # 2e.5. USAGE & STATUS UPDATE

@@ -42,6 +42,59 @@ Knowledge entries matched: <entries>
 ```
 ```
 
+## Knowledge Completer
+
+After every turn with tool calls on the root soul, `_maybe_run_knowledge_completer()` in `kimisoul.py` launches a `knowledge-completer` subagent to analyze the conversation and update the KB.
+
+### Incremental vs Full Analysis
+
+- `_last_completer_history_len` tracks how much history was already analyzed. On the next run, only new messages (`history[last_len:]`) are sent (incremental mode).
+- After context compaction, `_last_completer_history_len` resets to `0`, so the next run sends the last 40 messages (full mode).
+- Both modes cap at 40 messages for safety.
+
+### Prompts
+
+- **Incremental**: "Analyze ONLY the new conversation above. What additional knowledge was gained in this turn? Update DRILL_DOWN_TREE.md and create/update knowledge files... Do NOT duplicate existing entries."
+- **Full**: "Analyze the session above. What new knowledge was gained? What was missed? Update DRILL_DOWN_TREE.md and create/update knowledge files..."
+
+### Locking & Concurrency
+
+Uses `kb_try_lock(kb_dir)` to prevent concurrent completer runs. If another process holds the lock, the run is skipped with `COMPLETER_SKIP` + "another completer holds the KB lock".
+
+### Change Detection
+
+Before running the subagent, the completer records `{rel_path: mtime}` for every file in `knowledge_base_world/`. After the subagent finishes, it re-scans and compares mtimes:
+
+| Change | Marker | Example |
+|--------|--------|---------|
+| New file | `+` | `+Build_TypeChecking.md` |
+| Modified file | `~` | `~KnowledgeFeeder.md` |
+
+Result is logged as `COMPLETER_UPDATED` with `files` and `reason` fields.
+
+### Guards
+
+- Skip if not root soul.
+- Skip if no tool calls occurred in the turn.
+- Skip if `knowledge_base_world/` does not exist.
+- Skip if KB lock is held by another completer.
+
+### FEEDER_HELPED Telemetry
+
+After the completer finishes, `kimisoul.py` logs `FEEDER_HELPED`:
+
+```python
+no_exploration = self._exploration_calls_this_turn == 0
+completer_filled_gap = completer_updated is True
+feeder_helped = no_exploration or completer_filled_gap
+```
+
+The feeder "helped" if the agent did not need to explore files directly, or if the completer successfully added missing knowledge.
+
+→ Read: src/kimi_cli/soul/kimisoul.py
+→ Read: src/kimi_cli/utils/kb_io.py
+→ Read: src/kimi_cli/subagents/runner.py
+
 ## Logging
 
 All feeder events are written as structured JSONL to `~/.pc-kimi/logs/feeder/feeder_logs.jsonl` via `write_feeder_log()`.

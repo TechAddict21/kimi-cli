@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -361,86 +362,95 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
         history: Sequence[Message],
         soul: KimiSoul,
     ) -> list[DynamicInjection]:
-        write_feeder_log(
-            "FEEDER_TURN_START", soul.turn_id, is_root=soul.is_root, history_len=len(history)
-        )
-
-        if soul.turn_id == self._last_turn_id:
-            write_feeder_log("FEEDER_SKIP_SAME_TURN", soul.turn_id)
-            return []
-        self._last_turn_id = soul.turn_id
-
-        if not soul.is_root:
-            subagent_type = getattr(soul.runtime, "subagent_type", None)
-            if subagent_type not in FEEDER_ALLOWED_SUBAGENT_TYPES:
-                write_feeder_log("FEEDER_SKIP_SUBAGENT", str(subagent_type or ""))
-                return []
-            write_feeder_log("FEEDER_SUBAGENT_ALLOWED", str(subagent_type))
-
-        work_dir = soul.runtime.session.work_dir.unsafe_to_local_path()
-        write_feeder_log("FEEDER_WORK_DIR", str(work_dir))
-
-        if not self._ensure_init(work_dir):
-            write_feeder_log("FEEDER_INIT_FAILED", f"Cannot access {work_dir}")
-            return []
-
-        if not self._load_tree():
-            write_feeder_log("FEEDER_NO_TREE", "No tree loaded, skipping")
-            return []
-
-        user_msg_count = sum(
-            1 for msg in history if msg.role == "user" and not is_notification_message(msg)
-        )
-        if user_msg_count > 1:
-            write_feeder_log("FEEDER_SKIP_NOT_FIRST_MSG", f"user_msg_count={user_msg_count}")
-            return []
-
-        user_text = ""
-        for msg in reversed(history):
-            if msg.role == "user" and not is_notification_message(msg):
-                user_text = msg.extract_text(" ").strip()
-                break
-        if not user_text:
-            write_feeder_log("FEEDER_NO_USER_TEXT", "No user message found in history")
-            return []
-
-        if user_text == self._last_user_text and self._last_injection is not None:
+        feeder_start_time = time.time()
+        try:
             write_feeder_log(
-                "FEEDER_CACHE_HIT", user_text[:80], injection_len=len(self._last_injection)
+                "FEEDER_TURN_START", soul.turn_id, is_root=soul.is_root, history_len=len(history)
             )
-            return [DynamicInjection(type="knowledge_feeder", content=self._last_injection)]
 
-        matched_entries = await self._classify_relevance(user_text, soul)
-        if not matched_entries:
+            if soul.turn_id == self._last_turn_id:
+                write_feeder_log("FEEDER_SKIP_SAME_TURN", soul.turn_id)
+                return []
+            self._last_turn_id = soul.turn_id
+
+            if not soul.is_root:
+                subagent_type = getattr(soul.runtime, "subagent_type", None)
+                if subagent_type not in FEEDER_ALLOWED_SUBAGENT_TYPES:
+                    write_feeder_log("FEEDER_SKIP_SUBAGENT", str(subagent_type or ""))
+                    return []
+                write_feeder_log("FEEDER_SUBAGENT_ALLOWED", str(subagent_type))
+
+            work_dir = soul.runtime.session.work_dir.unsafe_to_local_path()
+            write_feeder_log("FEEDER_WORK_DIR", str(work_dir))
+
+            if not self._ensure_init(work_dir):
+                write_feeder_log("FEEDER_INIT_FAILED", f"Cannot access {work_dir}")
+                return []
+
+            if not self._load_tree():
+                write_feeder_log("FEEDER_NO_TREE", "No tree loaded, skipping")
+                return []
+
+            user_msg_count = sum(
+                1 for msg in history if msg.role == "user" and not is_notification_message(msg)
+            )
+            if user_msg_count > 1:
+                write_feeder_log("FEEDER_SKIP_NOT_FIRST_MSG", f"user_msg_count={user_msg_count}")
+                return []
+
+            user_text = ""
+            for msg in reversed(history):
+                if msg.role == "user" and not is_notification_message(msg):
+                    user_text = msg.extract_text(" ").strip()
+                    break
+            if not user_text:
+                write_feeder_log("FEEDER_NO_USER_TEXT", "No user message found in history")
+                return []
+
+            if user_text == self._last_user_text and self._last_injection is not None:
+                write_feeder_log(
+                    "FEEDER_CACHE_HIT", user_text[:80], injection_len=len(self._last_injection)
+                )
+                return [DynamicInjection(type="knowledge_feeder", content=self._last_injection)]
+
+            matched_entries = await self._classify_relevance(user_text, soul)
+            if not matched_entries:
+                self._last_user_text = user_text
+                self._last_injection = ""
+                return []
+
+            assert self._tree_read_paths is not None
+            code_context = _read_relevant_code(work_dir, self._tree_read_paths, matched_entries)
+            if not code_context:
+                write_feeder_log("FEEDER_NO_CODE", str(matched_entries))
+                self._last_user_text = user_text
+                self._last_injection = ""
+                return []
+
+            injection = (
+                "IMPORTANT: The following files have already been read and their "
+                "content is provided below. Do NOT read/re-read these files. "
+                "Use this context directly as the source of truth.\n"
+                f"Knowledge entries matched: {', '.join(matched_entries)}\n\n"
+                f"{code_context}"
+            )
+
+            write_feeder_log(
+                "FEEDER_INJECT",
+                f"injecting {len(injection)} bytes for turn {soul.turn_id}",
+                entries=matched_entries,
+            )
+
             self._last_user_text = user_text
-            self._last_injection = ""
-            return []
-
-        assert self._tree_read_paths is not None
-        code_context = _read_relevant_code(work_dir, self._tree_read_paths, matched_entries)
-        if not code_context:
-            write_feeder_log("FEEDER_NO_CODE", str(matched_entries))
-            self._last_user_text = user_text
-            self._last_injection = ""
-            return []
-
-        injection = (
-            "IMPORTANT: The following files have already been read and their "
-            "content is provided below. Do NOT read/re-read these files. "
-            "Use this context directly as the source of truth.\n"
-            f"Knowledge entries matched: {', '.join(matched_entries)}\n\n"
-            f"{code_context}"
-        )
-
-        write_feeder_log(
-            "FEEDER_INJECT",
-            f"injecting {len(injection)} bytes for turn {soul.turn_id}",
-            entries=matched_entries,
-        )
-
-        self._last_user_text = user_text
-        self._last_injection = injection
-        return [DynamicInjection(type="knowledge_feeder", content=injection)]
+            self._last_injection = injection
+            return [DynamicInjection(type="knowledge_feeder", content=injection)]
+        finally:
+            soul.write_trace_time(
+                "feeder",
+                feeder_start_time,
+                time.time(),
+                soul.context.token_count,
+            )
 
     async def on_context_compacted(self) -> None:
         write_feeder_log("FEEDER_CACHE_RESET", "compaction triggered")

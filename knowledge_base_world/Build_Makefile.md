@@ -29,6 +29,12 @@ The project uses `make` for common development tasks. All targets are defined in
 - `make prepare` — Runs `install-prek` as part of dependency sync.
 - Root hook config (`.pre-commit-config.yaml`) runs `make format-kimi-cli` and `make check-kimi-cli`.
 - Per-package hook configs (`packages/kaos/.pre-commit-config.yaml`, `packages/kosong/.pre-commit-config.yaml`) use `orphan: true` and run `make -C ../.. format-<pkg>` / `check-<pkg>`.
+- **Failure behavior**: If any package's `check-*` target fails (e.g., `ruff check` finds E501 line-too-long), the commit is blocked. All packages' hooks run independently.
+
+## Ruff configuration
+- Line length: **100 characters** (E501).
+- `make check-kimi-cli` runs `ruff check` then `ruff format --check`.
+- `make format-kimi-cli` runs `ruff check --fix` then `ruff format`.
 
 ## Builds
 - `make build` — Build all Python packages for release.
