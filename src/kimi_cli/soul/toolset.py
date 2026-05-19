@@ -335,12 +335,6 @@ class KimiToolset:
                     )
 
                 tool_elapsed = time.monotonic() - t0
-                logger.info(
-                    "Tool {tool_name} completed in {elapsed:.1f}s (call_id={call_id})",
-                    tool_name=tool_call.function.name,
-                    elapsed=tool_elapsed,
-                    call_id=tool_call.id,
-                )
                 from kimi_cli.telemetry import track as _track_tool_call
 
                 if isinstance(ret, ToolError):
@@ -483,14 +477,12 @@ class KimiToolset:
             try:
                 tool = self._load_tool(tool_path, dependencies)
             except SkipThisTool:
-                logger.info("Skipping tool: {tool_path}", tool_path=tool_path)
                 continue
             if tool:
                 self.add(tool)
                 good_tools.append(tool_path)
             else:
                 bad_tools.append(tool_path)
-        logger.info("Loaded tools: {good_tools}", good_tools=good_tools)
         if bad_tools:
             raise InvalidToolError(f"Invalid tools: {bad_tools}")
 
@@ -588,7 +580,6 @@ class KimiToolset:
                     self.add(tool)
 
                 server_info.status = "connected"
-                logger.info("Connected MCP server: {server_name}", server_name=server_name)
                 return server_name, None
             except Exception as e:
                 logger.error(
