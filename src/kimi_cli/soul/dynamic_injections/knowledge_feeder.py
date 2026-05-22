@@ -321,8 +321,10 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
         prompt = f"User message: {user_text}\n\nKnowledge tree:\n{tree_section}"
 
         try:
+            # Classification is a simple JSON-routing task — thinking adds latency with no benefit
+            classify_provider = llm.chat_provider.with_thinking("off")
             result = await generate(
-                chat_provider=llm.chat_provider,
+                chat_provider=classify_provider,
                 system_prompt=_CLASSIFICATION_SYSTEM_PROMPT,
                 tools=[],
                 history=[Message(role="user", content=[TextPart(text=prompt)])],
@@ -405,6 +407,15 @@ class KnowledgeFeederInjectionProvider(DynamicInjectionProvider):
                     break
             if not user_text:
                 write_feeder_log("FEEDER_NO_USER_TEXT", "No user message found in history")
+                return []
+
+            # Short messages (≤2 words, no technical chars) can't match KB entries
+            # — skip the LLM call
+            _tech_chars = set(r"./_()\[]{}<>=:`@#")
+            if len(user_text.split()) <= 2 and not _tech_chars.intersection(user_text):
+                write_feeder_log("FEEDER_SKIP_TRIVIAL", user_text[:80])
+                self._last_user_text = user_text
+                self._last_injection = ""
                 return []
 
             if user_text == self._last_user_text and self._last_injection is not None:

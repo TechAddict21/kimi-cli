@@ -36,6 +36,24 @@ The project uses `make` for common development tasks. All targets are defined in
 - `make check-kimi-cli` runs `ruff check` then `ruff format --check`.
 - `make format-kimi-cli` runs `ruff check --fix` then `ruff format`.
 
+### Fixing E501 line-too-long errors
+`ruff check --fix` auto-fixes many issues, but E501 often requires manual edits when a line cannot be broken automatically:
+
+- **Long comments**: split the comment across two lines.
+  ```python
+  # Short messages (≤2 words, no technical chars) can't match KB entries
+  # — skip the LLM call
+  ```
+- **Long boolean expressions**: wrap the entire expression with parentheses to enable implicit line continuation.
+  ```python
+  _streamed_live = (
+      self._reviewer_enabled and bool(self._runtime.config.reviewer_model)
+  )
+  ```
+- **Long strings or f-strings**: split into multiple parts or use parentheses.
+
+After manual fixes, run `make format-kimi-cli` to re-format and `make check-kimi-cli` to verify.
+
 ## Builds
 - `make build` — Build all Python packages for release.
 - `make build-bin` — Build standalone PyInstaller executable (one-file).

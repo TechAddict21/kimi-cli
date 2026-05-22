@@ -221,6 +221,10 @@ class Config(BaseModel):
     reviewer_max_iterations: int = Field(
         default=3, description="Maximum reviewer iterations per turn"
     )
+    reviewer_model: str | None = Field(
+        default=None,
+        description="Model alias for reviewer (uses primary model without thinking when unset)",
+    )
     stream: bool = Field(default=False, description="Enable streaming responses from the LLM")
     default_editor: str = Field(
         default="",

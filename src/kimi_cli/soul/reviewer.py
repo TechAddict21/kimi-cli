@@ -59,9 +59,9 @@ class Reviewer:
             logger.warning("Reviewer skipped: no LLM available")
             return None
 
-        history_text = "\n\n".join(
-            f"{msg.role}: {msg.extract_text(' ')}" for msg in context.history
-        )
+        # Only the last few turns matter for identity-rule checks; strip tool content
+        recent = [m for m in context.history if m.role in ("user", "assistant")][-4:]
+        history_text = "\n\n".join(f"{msg.role}: {msg.extract_text(' ')[:500]}" for msg in recent)
         final_text = final_message.extract_text(" ")
 
         review_prompt = REVIEWER.format(history_text=history_text, final_text=final_text)
@@ -71,10 +71,27 @@ class Reviewer:
 
         messages = [Message(role="user", content=[TextPart(text=review_prompt)])]
 
+        # Build review provider: use reviewer_model if configured, else disable thinking on primary
+        review_provider = llm.chat_provider
+        reviewer_model_alias = self._runtime.config.reviewer_model
+        if reviewer_model_alias:
+            model_cfg = self._runtime.config.models.get(reviewer_model_alias)
+            if model_cfg:
+                provider_cfg = self._runtime.config.providers.get(model_cfg.provider)
+                if provider_cfg:
+                    from kimi_cli.llm import create_llm
+
+                    fast_llm = create_llm(provider_cfg, model_cfg, thinking=False, stream=True)
+                    if fast_llm:
+                        review_provider = fast_llm.chat_provider
+        else:
+            # Reviewer task is simple identity-rule checking — no reasoning needed
+            review_provider = llm.chat_provider.with_thinking("off")
+
         try:
             result = await asyncio.wait_for(
                 generate(
-                    llm.chat_provider,
+                    review_provider,
                     "You are a helpful code reviewer. Respond only with valid JSON.",
                     [],
                     messages,

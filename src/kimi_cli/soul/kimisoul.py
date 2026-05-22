@@ -528,6 +528,11 @@ class KimiSoul:
                                     "COMPLETER_DONE",
                                     f"turn={self.turn_id} updated={updated}",
                                 )
+                        except asyncio.CancelledError:
+                            # Session closed while subagent was running
+                            # — KB may be partially updated
+                            write_feeder_log("COMPLETER_FAILED", "task_cancelled")
+                            raise
                         except Exception as e:
                             completer_updated = False
                             write_feeder_log("COMPLETER_FAILED", str(e))
@@ -1341,9 +1346,12 @@ class KimiSoul:
                             max=self._runtime.config.reviewer_max_iterations,
                         )
 
-                    # When reviewer is enabled, send the complete final message now
-                    # (streaming was disabled during kosong.step)
-                    if self._reviewer_enabled and final_message is not None:
+                    # Send buffered final message only when streaming was suppressed
+                    # (reviewer_model set → already streamed live; skip re-send)
+                    _streamed_live = self._reviewer_enabled and bool(
+                        self._runtime.config.reviewer_model
+                    )
+                    if self._reviewer_enabled and not _streamed_live and final_message is not None:
                         logger.info(
                             "Sending final message ({n} parts, {chars} chars)",
                             n=len(final_message.content),
@@ -1351,7 +1359,7 @@ class KimiSoul:
                         )
                         for part in final_message.content:
                             wire_send(part)
-                    elif self._reviewer_enabled:
+                    elif self._reviewer_enabled and not _streamed_live:
                         logger.info("Final message is None, nothing to send")
 
                     return TurnOutcome(
@@ -1464,13 +1472,16 @@ class KimiSoul:
                 )
             # ── 2e.4.2. kosong.step ───────────────────────────────────────────
             # run an LLM step (may be interrupted)
+            # Stream when reviewer uses a fast dedicated model
+            # (response arrives before user reads it)
+            _suppress_stream = self._reviewer_enabled and not self._runtime.config.reviewer_model
             return await kosong.step(
                 chat_provider,
                 self._agent.system_prompt,
                 self._agent.toolset,
                 effective_history,
-                on_message_part=None if self._reviewer_enabled else wire_send,
-                on_tool_result=None if self._reviewer_enabled else wire_send,
+                on_message_part=None if _suppress_stream else wire_send,
+                on_tool_result=None if _suppress_stream else wire_send,
             )
 
         max_attempts = self._loop_control.max_retries_per_step
@@ -1602,9 +1613,9 @@ class KimiSoul:
             )
 
         if result.tool_calls:
-            # When reviewer is enabled, send the complete assistant message and
-            # tool results for non-final steps so the user can follow progress.
-            if self._reviewer_enabled:
+            # When reviewer suppressed streaming, manually forward non-final step content.
+            # When reviewer_model is set, streaming is live — skip to avoid double-send.
+            if self._reviewer_enabled and not self._runtime.config.reviewer_model:
                 logger.debug(
                     "Sending non-final step content ({n_parts} parts, {n_tools} tool results)",
                     n_parts=len(result.message.content),
